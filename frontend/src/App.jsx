@@ -23,6 +23,8 @@ import {
   fetchOrders,
   fetchProducts,
   fetchSuppliers,
+  fetchShipments,
+  fetchInventory,
 } from './apiService';
 
 export default function App() {
@@ -47,6 +49,8 @@ export default function App() {
   const [orders, setOrders] = useState([]);
   const [products, setProducts] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
+  const [shipments, setShipments] = useState([]);
+  const [inventory, setInventory] = useState([]);
 
   // Detail Modal Drawer
   const [modalItem, setModalItem] = useState(null);
@@ -69,20 +73,24 @@ export default function App() {
         ordersRes,
         prodsRes,
         suppsRes,
+        shipmentsRes,
+        inventoryRes,
       ] = await Promise.all([
         fetchHealth(),
         fetchGoldSummary(),
-        fetchDeliveryPredictions(),
-        fetchDeliveryFeatures(),
-        fetchInventoryPredictions(),
-        fetchInventoryFeatures(),
-        fetchProcurementPredictions(),
-        fetchProcurementFeatures(),
+        fetchDeliveryPredictions({ limit: 100 }),
+        fetchDeliveryFeatures({ limit: 100 }),
+        fetchInventoryPredictions({ limit: 100 }),
+        fetchInventoryFeatures({ limit: 100 }),
+        fetchProcurementPredictions({ limit: 100 }),
+        fetchProcurementFeatures({ limit: 100 }),
         fetchOperationalKpis(),
-        fetchTopProducts(),
-        fetchOrders(),
-        fetchProducts(),
-        fetchSuppliers(),
+        fetchTopProducts({ limit: 10 }),
+        fetchOrders({ limit: 100 }),
+        fetchProducts({ limit: 100 }),
+        fetchSuppliers({ limit: 100 }),
+        fetchShipments({ limit: 100 }),
+        fetchInventory({ limit: 100 }),
       ]);
 
       setHealth(healthRes);
@@ -98,6 +106,8 @@ export default function App() {
       setOrders(ordersRes);
       setProducts(prodsRes);
       setSuppliers(suppsRes);
+      setShipments(shipmentsRes);
+      setInventory(inventoryRes);
     } catch (err) {
       console.error('Failed to load data:', err);
     } finally {
@@ -149,6 +159,7 @@ export default function App() {
                 predictions={deliveryPreds}
                 features={deliveryFeats}
                 onItemClick={handleItemClick}
+                onRefresh={loadAllData}
               />
             )}
 
@@ -157,6 +168,7 @@ export default function App() {
                 predictions={inventoryPreds}
                 features={inventoryFeats}
                 onItemClick={handleItemClick}
+                onRefresh={loadAllData}
               />
             )}
 
@@ -165,17 +177,19 @@ export default function App() {
                 predictions={procurementPreds}
                 features={procurementFeats}
                 onItemClick={handleItemClick}
+                onRefresh={loadAllData}
               />
             )}
 
             {activeTab === 'operations' && (
               <OperationsView
                 orders={orders}
-                shipments={deliveryFeats}
-                inventory={inventoryFeats}
+                shipments={shipments}
+                inventory={inventory}
                 products={products}
                 suppliers={suppliers}
                 onItemClick={handleItemClick}
+                onRefresh={loadAllData}
               />
             )}
           </>

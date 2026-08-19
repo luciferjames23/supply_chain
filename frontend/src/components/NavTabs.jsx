@@ -3,11 +3,11 @@ import { LayoutDashboard, Truck, Package, ShoppingCart, Activity } from 'lucide-
 
 export default function NavTabs({ activeTab, setActiveTab, problemsSummary }) {
   const tabs = [
-    { id: 'overview', label: 'Executive Control Tower', icon: LayoutDashboard, badge: null },
-    { id: 'delivery', label: 'Delivery ML Center', icon: Truck, badge: problemsSummary?.delivery_problems },
-    { id: 'inventory', label: 'Inventory ML Intelligence', icon: Package, badge: problemsSummary?.inventory_problems },
-    { id: 'procurement', label: 'Procurement Analytics', icon: ShoppingCart, badge: problemsSummary?.procurement_problems },
-    { id: 'operations', label: 'Operations Hub', icon: Activity, badge: null },
+    { id: 'overview', label: 'Executive Overview', icon: LayoutDashboard, badge: null },
+    { id: 'delivery', label: 'Delivery Tracking & Risks', icon: Truck, badge: problemsSummary?.delivery_problems },
+    { id: 'inventory', label: 'Inventory & Stock Forecasts', icon: Package, badge: problemsSummary?.inventory_problems },
+    { id: 'procurement', label: 'Procurement & Suppliers', icon: ShoppingCart, badge: problemsSummary?.procurement_problems },
+    { id: 'operations', label: 'Operations Center', icon: Activity, badge: null },
   ];
 
   return (

@@ -1,23 +1,23 @@
 import React, { useState } from 'react';
-import { Search, Package, ShieldAlert } from 'lucide-react';
+import { Search } from 'lucide-react';
 
-export default function InventoryView({ predictions, features, onItemClick }) {
+export default function InventoryView({ predictions = [], features = [], onItemClick }) {
   const [subTab, setSubTab] = useState('predictions');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
 
-  // Filter predictions
   const filteredPredictions = predictions.filter((item) => {
-    const matchesSearch = item.product_id?.toLowerCase().includes(search.toLowerCase()) ||
-                          item.warehouse_id?.toLowerCase().includes(search.toLowerCase());
+    const matchesSearch =
+      item.product_id?.toLowerCase().includes(search.toLowerCase()) ||
+      item.warehouse_id?.toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === 'ALL' || item.predicted_stock_status === statusFilter;
     return matchesSearch && matchesStatus;
   });
 
-  // Filter features
   const filteredFeatures = features.filter((item) => {
-    const matchesSearch = item.product_id?.toLowerCase().includes(search.toLowerCase()) ||
-                          item.warehouse_id?.toLowerCase().includes(search.toLowerCase());
+    const matchesSearch =
+      item.product_id?.toLowerCase().includes(search.toLowerCase()) ||
+      item.warehouse_id?.toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === 'ALL' || item.stock_status_prediction === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -31,13 +31,13 @@ export default function InventoryView({ predictions, features, onItemClick }) {
             className={`sub-tab ${subTab === 'predictions' ? 'active' : ''}`}
             onClick={() => setSubTab('predictions')}
           >
-            Inventory Predictions ({predictions.length})
+            Stockout & Reorder Forecasts ({predictions.length})
           </button>
           <button
             className={`sub-tab ${subTab === 'features' ? 'active' : ''}`}
             onClick={() => setSubTab('features')}
           >
-            Inventory ML Features ({features.length})
+            Stock Level & Demand Metrics ({features.length})
           </button>
         </div>
 
@@ -75,16 +75,16 @@ export default function InventoryView({ predictions, features, onItemClick }) {
                 <th>Product ID</th>
                 <th>Warehouse</th>
                 <th>Predicted Status</th>
-                <th>Severity</th>
-                <th>Optimal Reorder Qty</th>
-                <th>Recommended Safety Stock</th>
-                <th>Next Reorder Date</th>
+                <th>Risk Severity</th>
+                <th>Recommended Reorder Qty</th>
+                <th>Safety Stock Target</th>
+                <th>Suggested Reorder Date</th>
                 <th>Cost Impact</th>
               </tr>
             </thead>
             <tbody>
               {filteredPredictions.map((item, idx) => (
-                <tr key={idx} onClick={() => onItemClick(item, 'Inventory Prediction Detail')}>
+                <tr key={idx} onClick={() => onItemClick(item, 'Stock Reorder Forecast')}>
                   <td><strong style={{ color: 'var(--accent-cyan)' }}>{item.product_id}</strong></td>
                   <td>{item.warehouse_id}</td>
                   <td>
@@ -120,13 +120,13 @@ export default function InventoryView({ predictions, features, onItemClick }) {
                 <th>Avg Stock Level</th>
                 <th>Stockout Risk Score</th>
                 <th>Stock Health Score</th>
-                <th>Predicted Days to Stockout</th>
+                <th>Days to Stockout</th>
                 <th>Status</th>
               </tr>
             </thead>
             <tbody>
               {filteredFeatures.map((item, idx) => (
-                <tr key={idx} onClick={() => onItemClick(item, 'Inventory ML Feature Detail')}>
+                <tr key={idx} onClick={() => onItemClick(item, 'Stock Health Metrics')}>
                   <td><strong style={{ color: 'var(--accent-cyan)' }}>{item.product_id}</strong></td>
                   <td>{item.warehouse_id}</td>
                   <td>{item.total_demand ? item.total_demand.toLocaleString() : '—'}</td>

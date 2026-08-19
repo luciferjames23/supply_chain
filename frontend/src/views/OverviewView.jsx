@@ -1,5 +1,14 @@
 import React from 'react';
-import { AlertTriangle, Truck, Package, ShoppingCart, TrendingUp, Layers, CheckCircle2, ShieldAlert } from 'lucide-react';
+import { Truck, Package, ShoppingCart, TrendingUp, Layers, ShieldAlert } from 'lucide-react';
+
+const MODULE_NAMES = {
+  delivery_ml_features: 'Delivery Route & Transit History',
+  delivery_predictions: 'Delivery Delay Risk Forecasts',
+  inventory_ml_features: 'Warehouse Demand & Stock Metrics',
+  inventory_predictions: 'Inventory Risk & Reorder Alerts',
+  procurement_ml_features: 'Supplier Order & Fulfillment History',
+  procurement_predictions: 'Supplier Lead-Time Risk Forecasts',
+};
 
 export default function OverviewView({ goldSummary, kpis, topProducts, onSelectTab }) {
   const deliveryProblems = goldSummary?.detected_problems_summary?.delivery_problems || 269;
@@ -7,16 +16,20 @@ export default function OverviewView({ goldSummary, kpis, topProducts, onSelectT
   const procurementProblems = goldSummary?.detected_problems_summary?.procurement_problems || 6021;
   const totalAlerts = deliveryProblems + inventoryProblems + procurementProblems;
 
+  const formatModuleName = (key) => {
+    return MODULE_NAMES[key] || key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  };
+
   return (
     <div>
-      {/* Critical ML Alert Banner */}
+      {/* Critical Alert Banner */}
       <div className="alert-banner">
         <div className="alert-left">
           <ShieldAlert className="alert-icon" size={28} />
           <div>
-            <h3 className="alert-title">{totalAlerts.toLocaleString()} Databricks ML Anomaly Risk Alerts Detected</h3>
+            <h3 className="alert-title">{totalAlerts.toLocaleString()} Supply Chain Risk Alerts Detected</h3>
             <p className="alert-desc">
-              ML models flag <strong>{deliveryProblems} delivery delay risks</strong>, <strong>{inventoryProblems} stockout alerts</strong>, and <strong>{procurementProblems} procurement lead-time anomalies</strong> across the Gold schema.
+              System flags <strong>{deliveryProblems} delivery delay risks</strong>, <strong>{inventoryProblems} stockout alerts</strong>, and <strong>{procurementProblems} supplier delay warnings</strong> across your network.
             </p>
           </div>
         </div>
@@ -25,7 +38,7 @@ export default function OverviewView({ goldSummary, kpis, topProducts, onSelectT
           onClick={() => onSelectTab('delivery')}
           style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }}
         >
-          Review Predictions
+          Review Forecasts
         </button>
       </div>
 
@@ -33,9 +46,9 @@ export default function OverviewView({ goldSummary, kpis, topProducts, onSelectT
       <div className="kpi-grid">
         <div className="glass-card kpi-card cyan">
           <div>
-            <div className="kpi-title">Total Orders (Live)</div>
+            <div className="kpi-title">Active Orders</div>
             <div className="kpi-value">{kpis?.total_orders?.toLocaleString() || '1,151'}</div>
-            <div className="kpi-sub">Active order volume across hubs</div>
+            <div className="kpi-sub">Total active orders across all hubs</div>
           </div>
           <div className="kpi-icon">
             <TrendingUp size={24} />
@@ -46,7 +59,7 @@ export default function OverviewView({ goldSummary, kpis, topProducts, onSelectT
           <div>
             <div className="kpi-title">Delivery Delay Risk</div>
             <div className="kpi-value">{deliveryProblems}</div>
-            <div className="kpi-sub">Shipments with predicted ETA delay</div>
+            <div className="kpi-sub">Shipments with expected delay</div>
           </div>
           <div className="kpi-icon" style={{ color: 'var(--accent-rose)' }}>
             <Truck size={24} />
@@ -55,9 +68,9 @@ export default function OverviewView({ goldSummary, kpis, topProducts, onSelectT
 
         <div className="glass-card kpi-card amber">
           <div>
-            <div className="kpi-title">Stockout Alert Items</div>
+            <div className="kpi-title">Low Stock Alerts</div>
             <div className="kpi-value">{inventoryProblems}</div>
-            <div className="kpi-sub">Products nearing critical threshold</div>
+            <div className="kpi-sub">Items nearing reorder threshold</div>
           </div>
           <div className="kpi-icon" style={{ color: 'var(--accent-amber)' }}>
             <Package size={24} />
@@ -66,9 +79,9 @@ export default function OverviewView({ goldSummary, kpis, topProducts, onSelectT
 
         <div className="glass-card kpi-card purple">
           <div>
-            <div className="kpi-title">Procurement Lead Time Risk</div>
+            <div className="kpi-title">Supplier Delay Risks</div>
             <div className="kpi-value">{procurementProblems.toLocaleString()}</div>
-            <div className="kpi-sub">Supplier delay risk predictions</div>
+            <div className="kpi-sub">Procurement lead-time alerts</div>
           </div>
           <div className="kpi-icon" style={{ color: 'var(--accent-purple)' }}>
             <ShoppingCart size={24} />
@@ -76,15 +89,15 @@ export default function OverviewView({ goldSummary, kpis, topProducts, onSelectT
         </div>
       </div>
 
-      {/* Gold Tables Summary & Top Products Grid */}
+      {/* Modules Overview & Top Products Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(450px, 1fr))', gap: '1.5rem' }}>
-        {/* Databricks Gold Schema Index */}
+        {/* Operations Data Modules Summary */}
         <div className="glass-card">
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
             <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.1rem', color: '#fff' }}>
-              Databricks Gold Schema Tables Index
+              Data Modules Summary
             </h3>
-            <span className="badge info">6 Primary ML Tables</span>
+            <span className="badge info">6 Core Analytics Modules</span>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
@@ -104,11 +117,11 @@ export default function OverviewView({ goldSummary, kpis, topProducts, onSelectT
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                   <Layers size={18} style={{ color: 'var(--accent-cyan)' }} />
                   <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#f8fafc' }}>
-                    supply_chain.gold.{tbl}
+                    {formatModuleName(tbl)}
                   </span>
                 </div>
                 <span style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, color: 'var(--accent-cyan)' }}>
-                  {count.toLocaleString()} rows
+                  {count.toLocaleString()} items
                 </span>
               </div>
             ))}
@@ -119,9 +132,9 @@ export default function OverviewView({ goldSummary, kpis, topProducts, onSelectT
         <div className="glass-card">
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
             <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.1rem', color: '#fff' }}>
-              Top Products Demand Leaderboard
+              Top Demanded Products
             </h3>
-            <span className="badge success">Live Master Data</span>
+            <span className="badge success">Active Products</span>
           </div>
 
           <div className="table-container">
@@ -131,7 +144,7 @@ export default function OverviewView({ goldSummary, kpis, topProducts, onSelectT
                   <th>Product ID</th>
                   <th>Product Name</th>
                   <th>Category</th>
-                  <th>Ordered Qty</th>
+                  <th>Total Demand</th>
                 </tr>
               </thead>
               <tbody>

@@ -1,12 +1,25 @@
 // API Base URL (FastAPI Backend)
 const API_BASE = 'http://localhost:8000';
 
+// Helper to construct query strings from object parameters
+function buildQueryString(params = {}) {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '' && value !== 'ALL') {
+      query.append(key, value);
+    }
+  });
+  const queryString = query.toString();
+  return queryString ? `?${queryString}` : '';
+}
+
 // Generic Fetcher with Fallback
 async function fetchApi(endpoint, fallbackData) {
   try {
     const res = await fetch(`${API_BASE}${endpoint}`);
     if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-    return await res.json();
+    const data = await res.json();
+    return data;
   } catch (err) {
     console.warn(`[Backend Warning] Endpoint ${endpoint} unreachable. Using live fallback data.`, err.message);
     return fallbackData;
@@ -14,7 +27,7 @@ async function fetchApi(endpoint, fallbackData) {
 }
 
 // ─────────────────────────────────────────────
-// API Methods
+// API Methods (Dynamic with Query Support)
 // ─────────────────────────────────────────────
 
 export async function fetchHealth() {
@@ -47,8 +60,9 @@ export async function fetchGoldSummary() {
   });
 }
 
-export async function fetchDeliveryPredictions() {
-  return fetchApi('/api/v1/gold/delivery/predictions?limit=50', [
+export async function fetchDeliveryPredictions(params = { limit: 100 }) {
+  const qs = buildQueryString(params);
+  return fetchApi(`/api/v1/gold/delivery/predictions${qs}`, [
     {
       shipment_id: 'SHP11701',
       carrier_id: 'CAR004',
@@ -91,32 +105,12 @@ export async function fetchDeliveryPredictions() {
       recommended_action: 'NONE',
       carrier_reliability: 'HIGH',
     },
-    {
-      shipment_id: 'SHP56250',
-      carrier_id: 'CAR005',
-      origin: 'Atlanta, GA',
-      destination: 'Miami, FL',
-      predicted_delivery_hours: 24.2,
-      predicted_eta_variance_hours: 2.8,
-      predicted_delivery_date: '2026-08-20',
-      predicted_delay_hours: 3.1,
-      delay_risk: 'MEDIUM',
-      prediction_confidence: 0.86,
-      problem_detected: true,
-      problem_severity: 'MEDIUM',
-      problem_description: 'Port congestion near Jacksonville hub',
-      optimal_carrier: 'CAR003',
-      route_optimization_score: 0.82,
-      recommendation: 'Notify recipient of potential 3h variance',
-      action_priority: 'MEDIUM',
-      recommended_action: 'NOTIFY_CUSTOMER',
-      carrier_reliability: 'MEDIUM',
-    },
   ]);
 }
 
-export async function fetchDeliveryFeatures() {
-  return fetchApi('/api/v1/gold/delivery/features?limit=50', [
+export async function fetchDeliveryFeatures(params = { limit: 100 }) {
+  const qs = buildQueryString(params);
+  return fetchApi(`/api/v1/gold/delivery/features${qs}`, [
     {
       shipment_id: 'SHP5625',
       carrier_id: 'CAR003',
@@ -138,32 +132,12 @@ export async function fetchDeliveryFeatures() {
       risk_level: 'HIGH',
       recommended_action: 'EXPEDITE_TRANSIT',
     },
-    {
-      shipment_id: 'SHP10130',
-      carrier_id: 'CAR001',
-      carrier_name: 'Apex Logistics',
-      origin: 'Denver, CO',
-      destination: 'Kansas City, MO',
-      distance_km: 970,
-      estimated_delivery_hours: 14.0,
-      actual_delivery_hours: 13.8,
-      route_efficiency: 0.94,
-      weather_risk_score: 0.15,
-      traffic_risk_score: 0.20,
-      combined_risk_score: 0.18,
-      total_units_shipped: 820,
-      total_shipment_value: 98000.0,
-      shipment_status: 'DELIVERED',
-      is_delayed: false,
-      delay_hours: 0.0,
-      risk_level: 'LOW',
-      recommended_action: 'MAINTAIN_STANDARD',
-    },
   ]);
 }
 
-export async function fetchInventoryPredictions() {
-  return fetchApi('/api/v1/gold/inventory/predictions?limit=50', [
+export async function fetchInventoryPredictions(params = { limit: 100 }) {
+  const qs = buildQueryString(params);
+  return fetchApi(`/api/v1/gold/inventory/predictions${qs}`, [
     {
       product_id: 'PROD0022',
       warehouse_id: 'WH005',
@@ -181,45 +155,12 @@ export async function fetchInventoryPredictions() {
       action_priority: 'CRITICAL',
       estimated_cost_impact: 18400.0,
     },
-    {
-      product_id: 'PROD0051',
-      warehouse_id: 'WH004',
-      predicted_stock_status: 'OVERSTOCK',
-      prediction_confidence: 0.88,
-      problem_detected: true,
-      problem_severity: 'MEDIUM',
-      problem_description: 'Excess stock holding cost accumulating.',
-      estimated_impact_days: 45,
-      optimal_reorder_qty: 0,
-      optimal_safety_stock: 120,
-      reorder_urgency_score: 0.10,
-      next_reorder_date: '2026-10-15',
-      recommendation: 'Pause incoming orders; transfer 300 units to WH002',
-      action_priority: 'MEDIUM',
-      estimated_cost_impact: 4200.0,
-    },
-    {
-      product_id: 'PROD0101',
-      warehouse_id: 'WH001',
-      predicted_stock_status: 'OPTIMAL',
-      prediction_confidence: 0.98,
-      problem_detected: false,
-      problem_severity: 'NONE',
-      problem_description: 'Inventory levels aligned with forecast.',
-      estimated_impact_days: 0,
-      optimal_reorder_qty: 500,
-      optimal_safety_stock: 200,
-      reorder_urgency_score: 0.25,
-      next_reorder_date: '2026-09-01',
-      recommendation: 'Maintain automated reorder trigger',
-      action_priority: 'LOW',
-      estimated_cost_impact: 0.0,
-    },
   ]);
 }
 
-export async function fetchInventoryFeatures() {
-  return fetchApi('/api/v1/gold/inventory/features?limit=50', [
+export async function fetchInventoryFeatures(params = { limit: 100 }) {
+  const qs = buildQueryString(params);
+  return fetchApi(`/api/v1/gold/inventory/features${qs}`, [
     {
       product_id: 'PROD0101',
       warehouse_id: 'WH002',
@@ -236,27 +177,12 @@ export async function fetchInventoryFeatures() {
       stock_health_score: 0.91,
       stock_status_prediction: 'OPTIMAL',
     },
-    {
-      product_id: 'PROD0077',
-      warehouse_id: 'WH001',
-      total_orders: 289,
-      total_demand: 8900,
-      avg_order_quantity: 30.79,
-      avg_stock_level: 110.0,
-      min_stock_level: 12,
-      max_stock_level: 300,
-      predicted_days_to_stockout: 2.1,
-      stockout_risk_score: 0.95,
-      recommended_safety_stock: 400,
-      recommended_restock_qty: 1500,
-      stock_health_score: 0.18,
-      stock_status_prediction: 'CRITICAL',
-    },
   ]);
 }
 
-export async function fetchProcurementPredictions() {
-  return fetchApi('/api/v1/gold/procurement/predictions?limit=50', [
+export async function fetchProcurementPredictions(params = { limit: 100 }) {
+  const qs = buildQueryString(params);
+  return fetchApi(`/api/v1/gold/procurement/predictions${qs}`, [
     {
       carrier_id: 'CAR002',
       product_id: 'PROD0325',
@@ -275,29 +201,12 @@ export async function fetchProcurementPredictions() {
       recommendation: 'Switch procurement allocation to secondary supplier SUP009',
       action_priority: 'HIGH',
     },
-    {
-      carrier_id: 'CAR005',
-      product_id: 'PROD0264',
-      warehouse_id: 'WH001',
-      predicted_delay_risk: 0.12,
-      risk_category: 'LOW_RISK',
-      predicted_fulfillment_days: 3.5,
-      prediction_confidence: 0.96,
-      problem_detected: false,
-      problem_severity: 'NONE',
-      problem_description: 'Consistent lead times and zero defect rate',
-      optimal_order_qty: 400,
-      optimal_order_timing_days: 5,
-      alternative_supplier_recommended: false,
-      procurement_cost_impact: 0.0,
-      recommendation: 'Maintain primary supplier relationship',
-      action_priority: 'LOW',
-    },
   ]);
 }
 
-export async function fetchProcurementFeatures() {
-  return fetchApi('/api/v1/gold/procurement/features?limit=50', [
+export async function fetchProcurementFeatures(params = { limit: 100 }) {
+  const qs = buildQueryString(params);
+  return fetchApi(`/api/v1/gold/procurement/features${qs}`, [
     {
       carrier_id: 'CAR003',
       product_id: 'PROD0201',
@@ -311,19 +220,6 @@ export async function fetchProcurementFeatures() {
       supplier_reliability_score: 0.95,
       supplier_risk_category: 'LOW_RISK',
     },
-    {
-      carrier_id: 'CAR002',
-      product_id: 'PROD0353',
-      warehouse_id: 'WH005',
-      historical_order_count: 18,
-      total_quantity_ordered: 3200,
-      avg_unit_cost: 88.0,
-      avg_fulfillment_days: 11.8,
-      on_time_rate: 0.68,
-      delivery_consistency_score: 0.61,
-      supplier_reliability_score: 0.64,
-      supplier_risk_category: 'HIGH_RISK',
-    },
   ]);
 }
 
@@ -336,8 +232,9 @@ export async function fetchOperationalKpis() {
   });
 }
 
-export async function fetchTopProducts() {
-  return fetchApi('/api/v1/analytics/top-products?limit=5', [
+export async function fetchTopProducts(params = { limit: 5 }) {
+  const qs = buildQueryString(params);
+  return fetchApi(`/api/v1/analytics/top-products${qs}`, [
     { product_id: 'PROD0032', product_name: 'Speaker System', total_quantity_ordered: 5106, category: 'Electronics' },
     { product_id: 'PROD0166', product_name: 'Marker Pen', total_quantity_ordered: 4799, category: 'Stationery' },
     { product_id: 'PROD0295', product_name: 'Bow Tie', total_quantity_ordered: 4406, category: 'Apparel' },
@@ -346,26 +243,38 @@ export async function fetchTopProducts() {
   ]);
 }
 
-export async function fetchOrders() {
-  return fetchApi('/api/v1/orders?limit=15', [
+export async function fetchOrders(params = { limit: 100 }) {
+  const qs = buildQueryString(params);
+  return fetchApi(`/api/v1/orders/${qs}`, [
     { order_id: 'ORD-9841', customer_id: 'CUST-304', product_id: 'PROD0032', warehouse_id: 'WH001', order_date: '2026-08-18', ordered_quantity: 120, priority: 'HIGH', order_status: 'SHIPPED' },
-    { order_id: 'ORD-9842', customer_id: 'CUST-512', product_id: 'PROD0166', warehouse_id: 'WH003', order_date: '2026-08-18', ordered_quantity: 450, priority: 'MEDIUM', order_status: 'DELIVERED' },
-    { order_id: 'ORD-9843', customer_id: 'CUST-108', product_id: 'PROD0295', warehouse_id: 'WH002', order_date: '2026-08-19', ordered_quantity: 80, priority: 'URGENT', order_status: 'PENDING' },
   ]);
 }
 
-export async function fetchProducts() {
-  return fetchApi('/api/v1/products?limit=15', [
+export async function fetchShipments(params = { limit: 100 }) {
+  const qs = buildQueryString(params);
+  return fetchApi(`/api/v1/shipments/${qs}`, [
+    { shipment_id: 'SHP-9001', order_id: 'ORD-9841', carrier_id: 'CAR001', origin: 'Chicago, IL', destination: 'Dallas, TX', distance_km: 1500, shipment_status: 'IN_TRANSIT' },
+  ]);
+}
+
+export async function fetchInventory(params = { limit: 100 }) {
+  const qs = buildQueryString(params);
+  return fetchApi(`/api/v1/inventory/${qs}`, [
+    { product_id: 'PROD0032', warehouse_id: 'WH001', available_quantity: 450, reorder_point: 100, safety_stock: 50, stock_status: 'OPTIMAL' },
+  ]);
+}
+
+export async function fetchProducts(params = { limit: 100 }) {
+  const qs = buildQueryString(params);
+  return fetchApi(`/api/v1/products/${qs}`, [
     { product_id: 'PROD0032', product_name: 'Speaker System', category: 'Electronics', subcategory: 'Audio', unit_cost: 45.0, selling_price: 89.99, supplier_id: 'SUP001', lead_time_days: 4 },
-    { product_id: 'PROD0166', product_name: 'Marker Pen', category: 'Stationery', subcategory: 'Office Supplies', unit_cost: 0.50, selling_price: 1.99, supplier_id: 'SUP004', lead_time_days: 2 },
-    { product_id: 'PROD0295', product_name: 'Bow Tie', category: 'Apparel', subcategory: 'Accessories', unit_cost: 6.20, selling_price: 18.50, supplier_id: 'SUP002', lead_time_days: 5 },
   ]);
 }
 
-export async function fetchSuppliers() {
-  return fetchApi('/api/v1/suppliers?limit=15', [
+export async function fetchSuppliers(params = { limit: 100 }) {
+  const qs = buildQueryString(params);
+  return fetchApi(`/api/v1/suppliers/${qs}`, [
     { supplier_id: 'SUP001', supplier_name: 'Global Electronics Corp', location: 'Tokyo', country: 'Japan', supplier_rating: 4.8, active_status: 'Active' },
-    { supplier_id: 'SUP002', supplier_name: 'Apex Manufacturing Co', location: 'Berlin', country: 'Germany', supplier_rating: 4.2, active_status: 'Active' },
-    { supplier_id: 'SUP004', supplier_name: 'Pacific Trade Alliance', location: 'Singapore', country: 'Singapore', supplier_rating: 4.9, active_status: 'Active' },
   ]);
 }
+

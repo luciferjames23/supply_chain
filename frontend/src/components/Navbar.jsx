@@ -1,5 +1,5 @@
 import React from 'react';
-import { Database, ShieldCheck, Wifi, RefreshCw, Sparkles } from 'lucide-react';
+import { Database, Wifi, RefreshCw, Sparkles } from 'lucide-react';
 
 export default function Navbar({ health, onRefresh, loading }) {
   const isOnline = health && health.status === 'ok';
@@ -18,13 +18,13 @@ export default function Navbar({ health, onRefresh, loading }) {
       <div className="header-status">
         <div className="catalog-pill">
           <Database size={13} style={{ marginRight: '6px', verticalAlign: 'middle' }} />
-          {health?.catalog || 'supply_chain'}.{health?.schema || 'gold'}
+          Live Network Data
         </div>
 
         <div className={`status-badge ${isOnline ? '' : 'offline'}`}>
           <span className="dot"></span>
           <Wifi size={14} />
-          {isOnline ? 'Databricks SQL Connected' : 'Offline Mode'}
+          {isOnline ? 'System Online' : 'Offline Mode'}
         </div>
 
         <button 
