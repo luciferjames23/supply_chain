@@ -1,10 +1,19 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Search } from 'lucide-react';
+import Pagination from '../components/Pagination';
 
 export default function InventoryView({ predictions = [], features = [], onItemClick }) {
   const [subTab, setSubTab] = useState('predictions');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [subTab, search, statusFilter]);
 
   const filteredPredictions = predictions.filter((item) => {
     const matchesSearch =
@@ -22,6 +31,14 @@ export default function InventoryView({ predictions = [], features = [], onItemC
     return matchesSearch && matchesStatus;
   });
 
+  const currentDataset = subTab === 'predictions' ? filteredPredictions : filteredFeatures;
+
+  const getPaginatedData = (dataset) => {
+    if (pageSize === 'ALL') return dataset;
+    const start = (currentPage - 1) * pageSize;
+    return dataset.slice(start, start + pageSize);
+  };
+
   return (
     <div>
       {/* Sub nav */}
@@ -31,13 +48,13 @@ export default function InventoryView({ predictions = [], features = [], onItemC
             className={`sub-tab ${subTab === 'predictions' ? 'active' : ''}`}
             onClick={() => setSubTab('predictions')}
           >
-            Stockout & Reorder Forecasts ({predictions.length})
+            Stockout & Reorder Forecasts ({predictions.length.toLocaleString()})
           </button>
           <button
             className={`sub-tab ${subTab === 'features' ? 'active' : ''}`}
             onClick={() => setSubTab('features')}
           >
-            Stock Level & Demand Metrics ({features.length})
+            Stock Level & Demand Metrics ({features.length.toLocaleString()})
           </button>
         </div>
 
@@ -83,7 +100,7 @@ export default function InventoryView({ predictions = [], features = [], onItemC
               </tr>
             </thead>
             <tbody>
-              {filteredPredictions.map((item, idx) => (
+              {getPaginatedData(filteredPredictions).map((item, idx) => (
                 <tr key={idx} onClick={() => onItemClick(item, 'Stock Reorder Forecast')}>
                   <td><strong style={{ color: 'var(--accent-cyan)' }}>{item.product_id}</strong></td>
                   <td>{item.warehouse_id}</td>
@@ -125,7 +142,7 @@ export default function InventoryView({ predictions = [], features = [], onItemC
               </tr>
             </thead>
             <tbody>
-              {filteredFeatures.map((item, idx) => (
+              {getPaginatedData(filteredFeatures).map((item, idx) => (
                 <tr key={idx} onClick={() => onItemClick(item, 'Stock Health Metrics')}>
                   <td><strong style={{ color: 'var(--accent-cyan)' }}>{item.product_id}</strong></td>
                   <td>{item.warehouse_id}</td>
@@ -157,6 +174,18 @@ export default function InventoryView({ predictions = [], features = [], onItemC
           </table>
         </div>
       )}
+
+      {/* Pagination Controls */}
+      <Pagination
+        currentPage={currentPage}
+        totalItems={currentDataset.length}
+        pageSize={pageSize}
+        onPageChange={(page) => setCurrentPage(page)}
+        onPageSizeChange={(size) => {
+          setPageSize(size);
+          setCurrentPage(1);
+        }}
+      />
     </div>
   );
 }

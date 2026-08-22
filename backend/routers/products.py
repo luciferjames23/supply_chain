@@ -12,7 +12,7 @@ router = APIRouter(prefix="/products", tags=["Products"])
 def list_products(
     category: Optional[str] = Query(None, description="Filter by product category"),
     supplier_id: Optional[str] = Query(None, description="Filter by supplier ID"),
-    limit: int = Query(100, ge=1, le=1000),
+    limit: int = Query(10000, ge=1, le=100000),
     offset: int = Query(0, ge=0),
 ):
     """Retrieve product catalogue from `supply_chain.live_data.product_master`."""

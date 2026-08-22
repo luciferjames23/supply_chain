@@ -13,7 +13,7 @@ def list_shipments(
     shipment_status: Optional[str] = Query(None, description="Filter by shipment status"),
     carrier_id: Optional[str] = Query(None, description="Filter by carrier ID"),
     order_id: Optional[str] = Query(None, description="Filter by order ID"),
-    limit: int = Query(100, ge=1, le=1000),
+    limit: int = Query(10000, ge=1, le=100000),
     offset: int = Query(0, ge=0),
 ):
     """Retrieve shipment records from `supply_chain.live_data.shipments`."""

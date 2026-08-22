@@ -104,7 +104,7 @@ def list_delivery_ml_features(
     carrier_id: Optional[str] = Query(None, description="Filter by Carrier ID"),
     risk_level: Optional[str] = Query(None, description="Filter by Risk Level (e.g., HIGH, MEDIUM, LOW)"),
     is_delayed: Optional[bool] = Query(None, description="Filter by delayed status"),
-    limit: int = Query(100, ge=1, le=1000),
+    limit: int = Query(50000, ge=1, le=100000),
     offset: int = Query(0, ge=0),
 ):
     """Fetch feature records from `supply_chain.gold.delivery_ml_features`."""
@@ -164,7 +164,7 @@ def list_delivery_predictions(
     delay_risk: Optional[str] = Query(None, description="Filter by delay risk category"),
     problem_detected: Optional[bool] = Query(None, description="Filter by problem detected flag"),
     problem_severity: Optional[str] = Query(None, description="Filter by problem severity"),
-    limit: int = Query(100, ge=1, le=1000),
+    limit: int = Query(50000, ge=1, le=100000),
     offset: int = Query(0, ge=0),
 ):
     """Fetch prediction records from `supply_chain.gold.delivery_predictions`."""
@@ -225,7 +225,7 @@ def list_inventory_ml_features(
     product_id: Optional[str] = Query(None, description="Filter by Product ID"),
     warehouse_id: Optional[str] = Query(None, description="Filter by Warehouse ID"),
     stock_status_prediction: Optional[str] = Query(None, description="Filter by predicted stock status"),
-    limit: int = Query(100, ge=1, le=1000),
+    limit: int = Query(50000, ge=1, le=100000),
     offset: int = Query(0, ge=0),
 ):
     """Fetch feature records from `supply_chain.gold.inventory_ml_features`."""
@@ -289,7 +289,7 @@ def list_inventory_predictions(
     predicted_stock_status: Optional[str] = Query(None, description="Filter by predicted stock status"),
     problem_detected: Optional[bool] = Query(None, description="Filter by problem detected flag"),
     action_priority: Optional[str] = Query(None, description="Filter by action priority"),
-    limit: int = Query(100, ge=1, le=1000),
+    limit: int = Query(50000, ge=1, le=100000),
     offset: int = Query(0, ge=0),
 ):
     """Fetch prediction records from `supply_chain.gold.inventory_predictions`."""
@@ -356,7 +356,7 @@ def list_procurement_ml_features(
     product_id: Optional[str] = Query(None, description="Filter by Product ID"),
     warehouse_id: Optional[str] = Query(None, description="Filter by Warehouse ID"),
     supplier_risk_category: Optional[str] = Query(None, description="Filter by risk category"),
-    limit: int = Query(100, ge=1, le=1000),
+    limit: int = Query(50000, ge=1, le=100000),
     offset: int = Query(0, ge=0),
 ):
     """Fetch feature records from `supply_chain.gold.procurement_ml_features`."""
@@ -423,7 +423,7 @@ def list_procurement_predictions(
     risk_category: Optional[str] = Query(None, description="Filter by risk category"),
     problem_detected: Optional[bool] = Query(None, description="Filter by problem detected flag"),
     alternative_supplier_recommended: Optional[bool] = Query(None, description="Filter by alternative supplier recommended"),
-    limit: int = Query(100, ge=1, le=1000),
+    limit: int = Query(50000, ge=1, le=100000),
     offset: int = Query(0, ge=0),
 ):
     """Fetch prediction records from `supply_chain.gold.procurement_predictions`."""

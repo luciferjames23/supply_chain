@@ -13,7 +13,7 @@ def list_orders(
     status: Optional[str] = Query(None, description="Filter by order status (e.g., DELIVERED, PENDING, SHIPPED)"),
     priority: Optional[str] = Query(None, description="Filter by priority (e.g., HIGH, MEDIUM, LOW)"),
     warehouse_id: Optional[str] = Query(None, description="Filter by warehouse ID"),
-    limit: int = Query(100, ge=1, le=1000, description="Max records to return"),
+    limit: int = Query(10000, ge=1, le=100000, description="Max records to return"),
     offset: int = Query(0, ge=0, description="Number of records to skip"),
 ):
     """Retrieve supply chain orders from `supply_chain.live_data.orders`."""

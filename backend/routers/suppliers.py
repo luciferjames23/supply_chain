@@ -12,7 +12,7 @@ router = APIRouter(prefix="/suppliers", tags=["Suppliers"])
 def list_suppliers(
     country: Optional[str] = Query(None, description="Filter by country"),
     active_status: Optional[str] = Query(None, description="Filter by active status (e.g. Active, Inactive)"),
-    limit: int = Query(100, ge=1, le=1000),
+    limit: int = Query(10000, ge=1, le=100000),
     offset: int = Query(0, ge=0),
 ):
     """Retrieve supplier master data from `supply_chain.live_data.supplier_master`."""

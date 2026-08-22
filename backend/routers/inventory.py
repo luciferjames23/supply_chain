@@ -13,7 +13,7 @@ def list_inventory(
     warehouse_id: Optional[str] = Query(None, description="Filter by warehouse ID"),
     stock_status: Optional[str] = Query(None, description="Filter by stock status (e.g. LOW_STOCK, OPTIMAL, OVERSTOCK)"),
     product_id: Optional[str] = Query(None, description="Filter by product ID"),
-    limit: int = Query(100, ge=1, le=1000),
+    limit: int = Query(10000, ge=1, le=100000),
     offset: int = Query(0, ge=0),
 ):
     """Retrieve current inventory levels from `supply_chain.live_data.inventory`."""

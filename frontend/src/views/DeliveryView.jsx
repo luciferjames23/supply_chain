@@ -1,10 +1,20 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Search } from 'lucide-react';
+import Pagination from '../components/Pagination';
 
 export default function DeliveryView({ predictions = [], features = [], onItemClick }) {
   const [subTab, setSubTab] = useState('predictions');
   const [search, setSearch] = useState('');
   const [riskFilter, setRiskFilter] = useState('ALL');
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+
+  // Reset to page 1 whenever tab, search, or filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [subTab, search, riskFilter]);
 
   const filteredPredictions = predictions.filter((item) => {
     const matchesSearch =
@@ -26,6 +36,15 @@ export default function DeliveryView({ predictions = [], features = [], onItemCl
     return matchesSearch && matchesRisk;
   });
 
+  const currentDataset = subTab === 'predictions' ? filteredPredictions : filteredFeatures;
+
+  // Paginated slice
+  const getPaginatedData = (dataset) => {
+    if (pageSize === 'ALL') return dataset;
+    const start = (currentPage - 1) * pageSize;
+    return dataset.slice(start, start + pageSize);
+  };
+
   const formatShortNum = (num, suffix = '') => {
     if (num === null || num === undefined || isNaN(num)) return '—';
     const n = Math.max(0, Number(num));
@@ -42,13 +61,13 @@ export default function DeliveryView({ predictions = [], features = [], onItemCl
             className={`sub-tab ${subTab === 'predictions' ? 'active' : ''}`}
             onClick={() => setSubTab('predictions')}
           >
-            Delivery Risk Forecasts ({predictions.length})
+            Delivery Risk Forecasts ({predictions.length.toLocaleString()})
           </button>
           <button
             className={`sub-tab ${subTab === 'features' ? 'active' : ''}`}
             onClick={() => setSubTab('features')}
           >
-            Route & Transit Metrics ({features.length})
+            Route & Transit Metrics ({features.length.toLocaleString()})
           </button>
         </div>
 
@@ -93,7 +112,7 @@ export default function DeliveryView({ predictions = [], features = [], onItemCl
               </tr>
             </thead>
             <tbody>
-              {filteredPredictions.map((item, idx) => {
+              {getPaginatedData(filteredPredictions).map((item, idx) => {
                 const delayHrs = Math.max(0, Number(item.predicted_delay_hours || 0));
                 return (
                   <tr key={item.shipment_id || idx} onClick={() => onItemClick(item, 'Delivery Delay Forecast')}>
@@ -144,7 +163,7 @@ export default function DeliveryView({ predictions = [], features = [], onItemCl
               </tr>
             </thead>
             <tbody>
-              {filteredFeatures.map((item, idx) => (
+              {getPaginatedData(filteredFeatures).map((item, idx) => (
                 <tr key={item.shipment_id || idx} onClick={() => onItemClick(item, 'Transit Route Details')}>
                   <td><strong style={{ color: 'var(--accent-cyan)' }}>{item.shipment_id}</strong></td>
                   <td>{item.carrier_name || item.carrier_id}</td>
@@ -164,6 +183,18 @@ export default function DeliveryView({ predictions = [], features = [], onItemCl
           </table>
         </div>
       )}
+
+      {/* Pagination Controls */}
+      <Pagination
+        currentPage={currentPage}
+        totalItems={currentDataset.length}
+        pageSize={pageSize}
+        onPageChange={(page) => setCurrentPage(page)}
+        onPageSizeChange={(size) => {
+          setPageSize(size);
+          setCurrentPage(1);
+        }}
+      />
     </div>
   );
 }

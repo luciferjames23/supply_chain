@@ -1,9 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Search } from 'lucide-react';
+import Pagination from '../components/Pagination';
 
 export default function ProcurementView({ predictions = [], features = [], onItemClick }) {
   const [subTab, setSubTab] = useState('predictions');
   const [search, setSearch] = useState('');
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [subTab, search]);
 
   const filteredPredictions = predictions.filter((item) => {
     return (
@@ -21,6 +30,14 @@ export default function ProcurementView({ predictions = [], features = [], onIte
     );
   });
 
+  const currentDataset = subTab === 'predictions' ? filteredPredictions : filteredFeatures;
+
+  const getPaginatedData = (dataset) => {
+    if (pageSize === 'ALL') return dataset;
+    const start = (currentPage - 1) * pageSize;
+    return dataset.slice(start, start + pageSize);
+  };
+
   const formatDays = (val) => {
     if (val === null || val === undefined || isNaN(val)) return '—';
     const num = Math.max(0, Math.abs(Number(val)));
@@ -36,13 +53,13 @@ export default function ProcurementView({ predictions = [], features = [], onIte
             className={`sub-tab ${subTab === 'predictions' ? 'active' : ''}`}
             onClick={() => setSubTab('predictions')}
           >
-            Supplier Lead-Time Forecasts ({predictions.length})
+            Supplier Lead-Time Forecasts ({predictions.length.toLocaleString()})
           </button>
           <button
             className={`sub-tab ${subTab === 'features' ? 'active' : ''}`}
             onClick={() => setSubTab('features')}
           >
-            Supplier Performance History ({features.length})
+            Supplier Performance History ({features.length.toLocaleString()})
           </button>
         </div>
 
@@ -75,7 +92,7 @@ export default function ProcurementView({ predictions = [], features = [], onIte
               </tr>
             </thead>
             <tbody>
-              {filteredPredictions.map((item, idx) => (
+              {getPaginatedData(filteredPredictions).map((item, idx) => (
                 <tr key={idx} onClick={() => onItemClick(item, 'Supplier Risk Forecast')}>
                   <td><strong style={{ color: 'var(--accent-cyan)' }}>{item.carrier_id}</strong></td>
                   <td>{item.product_id}</td>
@@ -118,7 +135,7 @@ export default function ProcurementView({ predictions = [], features = [], onIte
               </tr>
             </thead>
             <tbody>
-              {filteredFeatures.map((item, idx) => (
+              {getPaginatedData(filteredFeatures).map((item, idx) => (
                 <tr key={idx} onClick={() => onItemClick(item, 'Supplier Performance Record')}>
                   <td><strong style={{ color: 'var(--accent-cyan)' }}>{item.carrier_name || item.carrier_id}</strong></td>
                   <td>{item.product_id}</td>
@@ -138,6 +155,18 @@ export default function ProcurementView({ predictions = [], features = [], onIte
           </table>
         </div>
       )}
+
+      {/* Pagination Controls */}
+      <Pagination
+        currentPage={currentPage}
+        totalItems={currentDataset.length}
+        pageSize={pageSize}
+        onPageChange={(page) => setCurrentPage(page)}
+        onPageSizeChange={(size) => {
+          setPageSize(size);
+          setCurrentPage(1);
+        }}
+      />
     </div>
   );
 }
