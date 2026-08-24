@@ -12,9 +12,53 @@ export default function DetailModal({ item, title, onClose }) {
       .replace(/\b\w/g, (char) => char.toUpperCase());
   };
 
+  const formatDate = (dateStr) => {
+    if (!dateStr || dateStr === '—') return '—';
+    try {
+      const str = String(dateStr).trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+        const [year, month, day] = str.split('-').map(Number);
+        const d = new Date(year, month - 1, day);
+        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      }
+      const d = new Date(str);
+      if (isNaN(d.getTime())) return str;
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    } catch (err) {
+      return String(dateStr);
+    }
+  };
+
   const formatVal = (key, val) => {
-    if (val === null || val === undefined) return '—';
+    if (val === null || val === undefined || val === '') return '—';
     if (typeof val === 'boolean') return val ? 'Yes' : 'No';
+
+    const lowerKey = key.toLowerCase();
+    if (lowerKey.includes('date') || lowerKey.includes('created_at') || lowerKey.includes('timestamp')) {
+      return formatDate(val);
+    }
+    if (
+      lowerKey.includes('efficiency') ||
+      lowerKey.includes('risk_score') ||
+      lowerKey.includes('on_time_rate') ||
+      lowerKey.includes('reliability_score') ||
+      lowerKey.includes('confidence') ||
+      lowerKey.includes('health_score')
+    ) {
+      if (typeof val === 'number' || (typeof val === 'string' && !isNaN(Number(val)))) {
+        const num = Number(val);
+        let pct = num > 1 ? num : num * 100;
+        pct = Math.min(100, Math.max(0, pct));
+        return `${Math.round(pct)}%`;
+      }
+    }
+
+    if (lowerKey.includes('value') || lowerKey.includes('cost') || lowerKey.includes('impact')) {
+      if (typeof val === 'number') {
+        return `$${Math.round(val).toLocaleString()}`;
+      }
+    }
+
     if (typeof val === 'number') {
       if (Number.isInteger(val)) return val.toLocaleString();
       const num = key.includes('days') ? Math.max(0, Math.abs(val)) : val;

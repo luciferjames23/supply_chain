@@ -39,6 +39,42 @@ export default function InventoryView({ predictions = [], features = [], onItemC
     return dataset.slice(start, start + pageSize);
   };
 
+  const formatNumberVal = (val, fallback = '—') => {
+    if (val === null || val === undefined || val === '') return fallback;
+    const num = Number(val);
+    if (isNaN(num)) return fallback;
+    return Math.round(num).toLocaleString();
+  };
+
+  const formatDate = (dateStr) => {
+    if (!dateStr || dateStr === '—') return '—';
+    try {
+      const str = String(dateStr).trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+        const [year, month, day] = str.split('-').map(Number);
+        const d = new Date(year, month - 1, day);
+        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      }
+      const d = new Date(str);
+      if (isNaN(d.getTime())) return str;
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    } catch (err) {
+      return String(dateStr);
+    }
+  };
+
+  const formatPercentage = (val, fallback = '—') => {
+    if (val === null || val === undefined || val === '') return fallback;
+    if (typeof val === 'string' && isNaN(Number(val))) {
+      return val;
+    }
+    const num = Number(val);
+    if (isNaN(num)) return fallback;
+    let pct = num > 1 ? num : num * 100;
+    pct = Math.min(100, Math.max(0, pct));
+    return `${Math.round(pct)}%`;
+  };
+
   return (
     <div>
       {/* Sub nav */}
@@ -74,9 +110,9 @@ export default function InventoryView({ predictions = [], features = [], onItemC
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
           >
-            <option value="ALL">All Stock Statuses</option>
+            <option value="ALL">All Statuses</option>
             <option value="STOCKOUT_RISK">Stockout Risk</option>
-            <option value="CRITICAL">Critical</option>
+            <option value="LOW_STOCK">Low Stock</option>
             <option value="OVERSTOCK">Overstock</option>
             <option value="OPTIMAL">Optimal</option>
           </select>
@@ -114,10 +150,10 @@ export default function InventoryView({ predictions = [], features = [], onItemC
                       {item.problem_severity || 'NONE'}
                     </span>
                   </td>
-                  <td><strong>{item.optimal_reorder_qty ? item.optimal_reorder_qty.toLocaleString() : 0} units</strong></td>
-                  <td>{item.optimal_safety_stock ? item.optimal_safety_stock.toLocaleString() : 0} units</td>
-                  <td>{item.next_reorder_date || '—'}</td>
-                  <td>${item.estimated_cost_impact ? item.estimated_cost_impact.toLocaleString() : '0'}</td>
+                  <td><strong>{formatNumberVal(item.optimal_reorder_qty, '0')} units</strong></td>
+                  <td>{formatNumberVal(item.optimal_safety_stock, '0')} units</td>
+                  <td>{formatDate(item.next_reorder_date)}</td>
+                  <td>{item.estimated_cost_impact ? `$${formatNumberVal(item.estimated_cost_impact)}` : '$0'}</td>
                 </tr>
               ))}
             </tbody>
@@ -146,16 +182,16 @@ export default function InventoryView({ predictions = [], features = [], onItemC
                 <tr key={idx} onClick={() => onItemClick(item, 'Stock Health Metrics')}>
                   <td><strong style={{ color: 'var(--accent-cyan)' }}>{item.product_id}</strong></td>
                   <td>{item.warehouse_id}</td>
-                  <td>{item.total_demand ? item.total_demand.toLocaleString() : '—'}</td>
-                  <td>{item.avg_stock_level ? item.avg_stock_level.toFixed(1) : '—'}</td>
+                  <td>{formatNumberVal(item.total_demand)}</td>
+                  <td>{formatNumberVal(item.avg_stock_level, '0')}</td>
                   <td>
-                    {item.stockout_risk_score !== undefined ? (
-                      <span style={{ color: item.stockout_risk_score > 0.6 ? 'var(--accent-rose)' : 'var(--accent-emerald)', fontWeight: 600 }}>
-                        {(item.stockout_risk_score * 100).toFixed(0)}%
+                    {item.stockout_risk_score !== undefined && item.stockout_risk_score !== null ? (
+                      <span style={{ color: (Number(item.stockout_risk_score) > 0.6 || Number(item.stockout_risk_score) > 60) ? 'var(--accent-rose)' : 'var(--accent-emerald)', fontWeight: 600 }}>
+                        {formatPercentage(item.stockout_risk_score, '0%')}
                       </span>
                     ) : '—'}
                   </td>
-                  <td>{item.stock_health_score ? `${(item.stock_health_score * 100).toFixed(0)}%` : '—'}</td>
+                  <td>{formatPercentage(item.stock_health_score, '—')}</td>
                   <td>
                     {item.predicted_days_to_stockout ? (
                       <strong style={{ color: item.predicted_days_to_stockout < 5 ? 'var(--accent-rose)' : 'inherit' }}>

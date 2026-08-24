@@ -19,6 +19,23 @@ export default function OperationsView({ orders = [], shipments = [], inventory 
     return prod ? prod.product_name : pid;
   };
 
+  const formatDate = (dateStr) => {
+    if (!dateStr || dateStr === '—') return '—';
+    try {
+      const str = String(dateStr).trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+        const [year, month, day] = str.split('-').map(Number);
+        const d = new Date(year, month - 1, day);
+        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      }
+      const d = new Date(str);
+      if (isNaN(d.getTime())) return str;
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    } catch (err) {
+      return String(dateStr);
+    }
+  };
+
   const term = search.toLowerCase();
 
   const filteredOrders = orders.filter(
@@ -150,7 +167,7 @@ export default function OperationsView({ orders = [], shipments = [], inventory 
                   <td><strong>{item.ordered_quantity}</strong></td>
                   <td><span className={`badge ${(item.priority || 'MEDIUM').toLowerCase()}`}>{item.priority}</span></td>
                   <td><span className={`badge ${(item.order_status || 'DELIVERED').toLowerCase()}`}>{item.order_status}</span></td>
-                  <td>{item.order_date}</td>
+                  <td>{formatDate(item.order_date)}</td>
                 </tr>
               ))}
             </tbody>

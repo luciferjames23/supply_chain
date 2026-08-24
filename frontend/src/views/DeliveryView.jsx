@@ -52,6 +52,39 @@ export default function DeliveryView({ predictions = [], features = [], onItemCl
     return `${formatted}${suffix}`;
   };
 
+  const formatDate = (dateStr) => {
+    if (!dateStr || dateStr === '—') return '—';
+    try {
+      const str = String(dateStr).trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+        const [year, month, day] = str.split('-').map(Number);
+        const d = new Date(year, month - 1, day);
+        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      }
+      const d = new Date(str);
+      if (isNaN(d.getTime())) return str;
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    } catch (err) {
+      return String(dateStr);
+    }
+  };
+
+  const formatPercentage = (val, fallback = '—') => {
+    if (val === null || val === undefined || val === '') return fallback;
+    if (typeof val === 'string' && isNaN(Number(val))) {
+      const s = val.trim().toUpperCase();
+      if (s === 'LOW') return '0%';
+      if (s === 'MEDIUM') return '45%';
+      if (s === 'HIGH') return '85%';
+      return val;
+    }
+    const num = Number(val);
+    if (isNaN(num)) return fallback;
+    let pct = num > 1 ? num : num * 100;
+    pct = Math.min(100, Math.max(0, pct));
+    return `${Math.round(pct)}%`;
+  };
+
   return (
     <div>
       {/* Sub navigation & Search bar */}
@@ -119,7 +152,7 @@ export default function DeliveryView({ predictions = [], features = [], onItemCl
                     <td><strong style={{ color: 'var(--accent-cyan)' }}>{item.shipment_id}</strong></td>
                     <td>{item.carrier_id}</td>
                     <td>{item.origin} &rarr; {item.destination}</td>
-                    <td>{item.predicted_delivery_hours ? formatShortNum(item.predicted_delivery_hours, ' hrs') : (item.predicted_delivery_date || '—')}</td>
+                    <td>{item.predicted_delivery_hours ? formatShortNum(item.predicted_delivery_hours, ' hrs') : formatDate(item.predicted_delivery_date)}</td>
                     <td>
                       {delayHrs > 0 ? (
                         <span style={{ color: 'var(--accent-rose)', fontWeight: 600 }}>
@@ -134,7 +167,7 @@ export default function DeliveryView({ predictions = [], features = [], onItemCl
                         {item.delay_risk || 'LOW'}
                       </span>
                     </td>
-                    <td>{(item.prediction_confidence ? (item.prediction_confidence * 100).toFixed(0) : 95)}%</td>
+                    <td>{formatPercentage(item.prediction_confidence, '95%')}</td>
                     <td>
                       <span className="badge info">{item.recommended_action || item.recommendation || 'Standard Transit'}</span>
                     </td>
@@ -168,10 +201,10 @@ export default function DeliveryView({ predictions = [], features = [], onItemCl
                   <td><strong style={{ color: 'var(--accent-cyan)' }}>{item.shipment_id}</strong></td>
                   <td>{item.carrier_name || item.carrier_id}</td>
                   <td>{item.distance_km ? `${Math.round(item.distance_km).toLocaleString()} km` : '—'}</td>
-                  <td>{item.route_efficiency ? `${(item.route_efficiency * 100).toFixed(0)}%` : '—'}</td>
-                  <td>{item.weather_risk_score ? (item.weather_risk_score * 100).toFixed(0) + '%' : 'Low'}</td>
-                  <td>{item.traffic_risk_score ? (item.traffic_risk_score * 100).toFixed(0) + '%' : 'Low'}</td>
-                  <td>${item.total_shipment_value ? Math.round(item.total_shipment_value).toLocaleString() : '—'}</td>
+                  <td>{formatPercentage(item.route_efficiency, '—')}</td>
+                  <td>{formatPercentage(item.weather_risk_score, '0%')}</td>
+                  <td>{formatPercentage(item.traffic_risk_score, '0%')}</td>
+                  <td>{item.total_shipment_value ? `$${Math.round(item.total_shipment_value).toLocaleString()}` : '—'}</td>
                   <td>
                     <span className={`badge ${(item.risk_level || 'LOW').toLowerCase()}`}>
                       {item.risk_level || 'LOW'}
