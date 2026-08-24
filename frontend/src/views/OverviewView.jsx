@@ -94,7 +94,7 @@ export default function OverviewView({ goldSummary, kpis, topProducts, onSelectT
         {/* Operations Data Modules Summary */}
         <div className="glass-card">
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
-            <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.1rem', color: '#fff' }}>
+            <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.1rem', color: 'var(--text-main)' }}>
               Data Modules Summary
             </h3>
             <span className="badge info">6 Core Analytics Modules</span>
@@ -110,13 +110,13 @@ export default function OverviewView({ goldSummary, kpis, topProducts, onSelectT
                   justifyContent: 'space-between', 
                   padding: '0.75rem 1rem', 
                   borderRadius: 'var(--radius-md)', 
-                  background: 'rgba(255,255,255,0.02)',
+                  background: 'var(--bg-card-hover)',
                   border: '1px solid var(--border-light)' 
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                   <Layers size={18} style={{ color: 'var(--accent-cyan)' }} />
-                  <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#f8fafc' }}>
+                  <span style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-main)' }}>
                     {formatModuleName(tbl)}
                   </span>
                 </div>
@@ -131,7 +131,7 @@ export default function OverviewView({ goldSummary, kpis, topProducts, onSelectT
         {/* Top Ordered Products */}
         <div className="glass-card">
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
-            <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.1rem', color: '#fff' }}>
+            <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.1rem', color: 'var(--text-main)' }}>
               Top Demanded Products
             </h3>
             <span className="badge success">Active Products</span>

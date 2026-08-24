@@ -31,6 +31,20 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('overview');
   const [loading, setLoading] = useState(true);
 
+  // Theme state: default to 'light' (normal) theme
+  const [theme, setTheme] = useState(() => {
+    return localStorage.getItem('sc_theme') || 'light';
+  });
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('sc_theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
+  };
+
   // Health & Summary Data
   const [health, setHealth] = useState(null);
   const [goldSummary, setGoldSummary] = useState(null);
@@ -127,7 +141,7 @@ export default function App() {
   return (
     <div className="app-container">
       {/* Top Navbar */}
-      <Navbar health={health} onRefresh={loadAllData} loading={loading} />
+      <Navbar health={health} onRefresh={loadAllData} loading={loading} theme={theme} toggleTheme={toggleTheme} />
 
       {/* Main Tab Bar */}
       <NavTabs

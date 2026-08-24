@@ -1,7 +1,7 @@
 import React from 'react';
-import { Database, Wifi, RefreshCw, Sparkles } from 'lucide-react';
+import { Database, Wifi, RefreshCw, Sparkles, Sun, Moon } from 'lucide-react';
 
-export default function Navbar({ health, onRefresh, loading }) {
+export default function Navbar({ health, onRefresh, loading, theme = 'light', toggleTheme }) {
   const isOnline = health && health.status === 'ok';
 
   return (
@@ -28,10 +28,18 @@ export default function Navbar({ health, onRefresh, loading }) {
         </div>
 
         <button 
-          className="sub-tab" 
+          className="theme-toggle-btn" 
+          onClick={toggleTheme}
+          title={theme === 'light' ? 'Switch to Dark Mode' : 'Switch to Normal Light Mode'}
+        >
+          {theme === 'light' ? <Moon size={15} /> : <Sun size={15} />}
+          <span>{theme === 'light' ? 'Dark Mode' : 'Light Mode'}</span>
+        </button>
+
+        <button 
+          className="refresh-btn" 
           onClick={onRefresh} 
           disabled={loading}
-          style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#fff', border: '1px solid rgba(255,255,255,0.1)' }}
         >
           <RefreshCw size={14} className={loading ? 'spinner' : ''} />
           Refresh
