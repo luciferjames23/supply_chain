@@ -2,6 +2,7 @@ import json
 import os
 import re
 import time
+import difflib
 import urllib.request
 from typing import List, Optional, Tuple
 from fastapi import APIRouter, HTTPException, Query
@@ -19,9 +20,47 @@ from routers.gold import (
 
 router = APIRouter(prefix="/chat", tags=["AI Copilot Chatbot"])
 
-# Response Cache Layer (Key -> { "response": ChatResponse, "timestamp": float, "hit_count": int })
+# Semantic Response Cache Layer (Key -> { "original_prompt": str, "response": ChatResponse, "timestamp": float, "hit_count": int })
 RESPONSE_CACHE = {}
 CACHE_TTL_SECONDS = 172800  # 2 Days (48 Hours) Cache TTL
+SEMANTIC_SIMILARITY_THRESHOLD = 0.55  # 55% Semantic Similarity threshold for cache hit
+
+SYNONYM_MAP = {
+    'delivery': 'shipment',
+    'deliveries': 'shipment',
+    'shipments': 'shipment',
+    'package': 'shipment',
+    'freight': 'shipment',
+    'parcel': 'shipment',
+    'order': 'shipment',
+    'orders': 'shipment',
+    
+    'last': 'latest',
+    'recent': 'latest',
+    'newest': 'latest',
+    'first': 'latest',
+    
+    'cost': 'price',
+    'sell': 'price',
+    'sales': 'price',
+    'expensive': 'price',
+    'valuable': 'price',
+    'revenue': 'price',
+    'pricing': 'price',
+    
+    'stock': 'inventory',
+    'stockout': 'inventory',
+    'stockouts': 'inventory',
+    'warehouse': 'inventory',
+    'warehouses': 'inventory',
+    'storage': 'inventory',
+    
+    'vendor': 'supplier',
+    'vendors': 'supplier',
+    'suppliers': 'supplier',
+    'manufacturer': 'supplier',
+    'procurement': 'supplier',
+}
 
 
 class ChatRequest(BaseModel):
@@ -49,27 +88,98 @@ def get_cache_key(prompt: str) -> str:
     return re.sub(r'[^a-z0-9]', '', prompt.lower())
 
 
+def extract_semantic_tokens(text: str) -> set:
+    """Extract normalized semantic word tokens with Synonym Canonical Mapping."""
+    stop_words = {'is', 'the', 'our', 'a', 'an', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'what', 'which', 'tell', 'me', 'show', 'give', 'get', 'can', 'you', 'are', 'we', 'have', 'has'}
+    words = re.findall(r'\b[a-z0-9]+\b', text.lower())
+    tokens = set()
+    for w in words:
+        if w not in stop_words and len(w) > 1:
+            canonical = SYNONYM_MAP.get(w, w)
+            tokens.add(canonical)
+    return tokens
+
+
+def compute_semantic_similarity(query_a: str, query_b: str) -> float:
+    """
+    Compute semantic similarity between two queries (0.0 to 1.0).
+    Combines Jaccard token overlap + String sequence ratio + Entity ID matching.
+    """
+    if not query_a or not query_b:
+        return 0.0
+        
+    tokens_a = extract_semantic_tokens(query_a)
+    tokens_b = extract_semantic_tokens(query_b)
+    
+    if not tokens_a or not tokens_b:
+        return 0.0
+        
+    # Jaccard Token Similarity with Synonym Canonicalization
+    intersection = len(tokens_a.intersection(tokens_b))
+    union = len(tokens_a.union(tokens_b))
+    jaccard_sim = intersection / union if union > 0 else 0.0
+    
+    # String Sequence Ratio
+    seq_sim = difflib.SequenceMatcher(None, query_a.lower(), query_b.lower()).ratio()
+    
+    # Entity ID Guard: If specific ID like SHP5119 or PROD0032 is present, IDs MUST match!
+    entities_a = set(re.findall(r'(?:shp|prod|wh|car)\d+', query_a.lower()))
+    entities_b = set(re.findall(r'(?:shp|prod|wh|car)\d+', query_b.lower()))
+    if entities_a or entities_b:
+        if entities_a != entities_b:
+            return 0.0
+
+    semantic_score = (jaccard_sim * 0.75) + (seq_sim * 0.25)
+    return semantic_score
+
+
 def check_cache(prompt: str) -> Optional[ChatResponse]:
-    """Check if query response is available in cache to save LLM API cost."""
-    key = get_cache_key(prompt)
-    if key in RESPONSE_CACHE:
-        entry = RESPONSE_CACHE[key]
-        if time.time() - entry["timestamp"] < CACHE_TTL_SECONDS:
+    """Check if query response is available in cache via Exact or Semantic Search."""
+    exact_key = get_cache_key(prompt)
+    now = time.time()
+
+    # 1. Exact Cache Match
+    if exact_key in RESPONSE_CACHE:
+        entry = RESPONSE_CACHE[exact_key]
+        if now - entry["timestamp"] < CACHE_TTL_SECONDS:
             entry["hit_count"] += 1
             cached_res = entry["response"].copy()
-            cached_res.source = f"Cache Hit (Saved LLM Cost) | {cached_res.source}"
-            print(f"[AI COPILOT CACHE HIT] Query: '{prompt}' | Saved Groq LLM API Call | Total Hits: {entry['hit_count']}")
+            cached_res.source = f"Exact Cache Hit (Saved LLM Cost) | {cached_res.source}"
+            print(f"[AI COPILOT CACHE HIT] Exact Query Match: '{prompt}' | Saved LLM Cost | Hits: {entry['hit_count']}")
             return cached_res
         else:
-            del RESPONSE_CACHE[key]
+            del RESPONSE_CACHE[exact_key]
+
+    # 2. Semantic Search Cache Match
+    best_key = None
+    best_score = 0.0
+
+    for key, entry in list(RESPONSE_CACHE.items()):
+        if now - entry["timestamp"] >= CACHE_TTL_SECONDS:
+            continue
+        score = compute_semantic_similarity(prompt, entry.get("original_prompt", ""))
+        if score > best_score:
+            best_score = score
+            best_key = key
+
+    if best_key and best_score >= SEMANTIC_SIMILARITY_THRESHOLD:
+        entry = RESPONSE_CACHE[best_key]
+        entry["hit_count"] += 1
+        cached_res = entry["response"].copy()
+        pct = int(round(best_score * 100))
+        cached_res.source = f"Semantic Cache Hit ({pct}% Match) | {cached_res.source}"
+        print(f"[AI COPILOT SEMANTIC CACHE HIT] Query: '{prompt}' ~ Matched: '{entry.get('original_prompt')}' ({pct}% Similarity) | Saved Groq LLM API Call")
+        return cached_res
+
     return None
 
 
 def store_cache(prompt: str, res: ChatResponse):
-    """Store generated response in cache."""
+    """Store generated response in cache with original prompt for Semantic Search."""
     key = get_cache_key(prompt)
     if key:
         RESPONSE_CACHE[key] = {
+            "original_prompt": prompt,
             "response": res,
             "timestamp": time.time(),
             "hit_count": 0
@@ -262,13 +372,13 @@ def call_groq_llama_70b(user_prompt: str, context_str: str) -> Optional[str]:
     return None
 
 
-@router.post("/message", response_model=ChatResponse, summary="Send message to Groq AI Supply Chain Copilot with Databricks RAG & Response Cache")
+@router.post("/message", response_model=ChatResponse, summary="Send message to Groq AI Supply Chain Copilot with Databricks RAG & Semantic Cache")
 def process_chat_message(req: ChatRequest):
     """
     Databricks Catalog RAG & Groq LLM powered AI Control Tower Copilot.
-    Features Query Response Caching to eliminate duplicate LLM API costs.
+    Features Semantic Response Cache to match semantically equivalent queries using different words.
     """
-    # 0. Check Response Cache to eliminate LLM costs on repeated queries
+    # 0. Check Semantic Response Cache to eliminate LLM costs on equivalent queries
     cached = check_cache(req.message)
     if cached:
         return cached
@@ -316,11 +426,12 @@ def process_chat_message(req: ChatRequest):
         else:
             source_label = "Databricks Gold Analytics Engine (Offline Fallback)"
             llm_reply = (
-                "I am your **Databricks Catalog RAG Supply Chain AI Copilot**.\n\n"
-                "• **Shipment & Delivery Risks** (*e.g., 'Which shipment is our last shipment?'* or *'Analyze SHP56305'*)\n"
+                "### 👋 Welcome to your Supply Chain AI Control Tower!\n\n"
+                "I am actively monitoring your enterprise logistics network. Ask me about:\n\n"
+                "• **Shipment & Delivery Tracking** (*e.g., 'Which shipment is our last shipment?'* or *'Analyze SHP56305'*)\n"
                 "• **Stockout & Reorder Forecasts** (*e.g., 'Show stockout risks for warehouse WH002'*)\n"
                 "• **Supplier & Procurement Reliability** (*e.g., 'Which suppliers have high fulfillment delays?'*)\n"
-                "• **Executive KPIs** (*e.g., 'Summarize overall network health'*)\n"
+                "• **Executive Logistics KPIs** (*e.g., 'Summarize overall network health'*)\n"
             )
 
         res = ChatResponse(

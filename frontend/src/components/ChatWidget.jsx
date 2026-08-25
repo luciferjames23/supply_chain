@@ -6,7 +6,7 @@ const INITIAL_WELCOME = [
   {
     id: 'welcome',
     sender: 'bot',
-    text: '### 👋 Welcome to Supply Chain AI Copilot!\n\nI am connected to your **Databricks Gold Catalog RAG** & ML data. Ask me about shipment delays, weather/traffic risks, warehouse stockouts, or supplier lead times.',
+    text: '### 👋 Welcome to your Supply Chain AI Copilot!\n\nI am continuously monitoring your live supply chain operations. Ask me about shipment delivery tracking, weather and traffic delay risks, warehouse inventory stockouts, or supplier lead times.',
     actionChips: [
       { label: 'High Risk Shipments', action_type: 'NAVIGATE', target: 'delivery' },
       { label: 'Stockout Risks', action_type: 'NAVIGATE', target: 'inventory' },
