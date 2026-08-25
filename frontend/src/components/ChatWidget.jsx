@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Bot, X, Send, Sparkles, ChevronDown, ArrowRight, CornerDownLeft, RefreshCw, RotateCcw } from 'lucide-react';
+import { Bot, X, Send, Sparkles, ChevronDown, ArrowRight, CornerDownLeft, RefreshCw, RotateCcw, Copy, Check } from 'lucide-react';
 import { sendChatMessage } from '../apiService';
 
 const INITIAL_WELCOME = [
@@ -20,6 +20,14 @@ export default function ChatWidget({ activeTab = 'overview', onSelectTab, onItem
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [messages, setMessages] = useState(INITIAL_WELCOME);
+  const [copiedId, setCopiedId] = useState(null);
+
+  const handleCopyAnswer = (msgId, text) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setCopiedId(msgId);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
 
   const handleClearChat = () => {
     setMessages(INITIAL_WELCOME);
@@ -214,7 +222,7 @@ export default function ChatWidget({ activeTab = 'overview', onSelectTab, onItem
               <div>
                 <h3 className="chat-header-title">Supply Chain Copilot</h3>
                 <span className="chat-status-sub">
-                  Connected to Databricks Gold ML ({activeTab.toUpperCase()})
+                  Online • Live Supply Chain Intelligence
                 </span>
               </div>
             </div>
@@ -253,6 +261,29 @@ export default function ChatWidget({ activeTab = 'overview', onSelectTab, onItem
                           <ArrowRight size={12} />
                         </button>
                       ))}
+                    </div>
+                  )}
+
+                  {/* ChatGPT-Style Copy Answer Button */}
+                  {m.sender === 'bot' && (
+                    <div className="chat-msg-footer">
+                      <button
+                        className={`chat-copy-btn ${copiedId === m.id ? 'copied' : ''}`}
+                        onClick={() => handleCopyAnswer(m.id, m.text)}
+                        title={copiedId === m.id ? 'Copied to clipboard!' : 'Copy answer'}
+                      >
+                        {copiedId === m.id ? (
+                          <>
+                            <Check size={12} />
+                            <span>Copied!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy size={12} />
+                            <span>Copy</span>
+                          </>
+                        )}
+                      </button>
                     </div>
                   )}
                 </div>
