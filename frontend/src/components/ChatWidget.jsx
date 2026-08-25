@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Bot, X, Send, Sparkles, ChevronDown, ArrowRight, CornerDownLeft, RefreshCw, RotateCcw, Copy, Check } from 'lucide-react';
+import { Bot, X, Send, Sparkles, ChevronDown, ArrowRight, CornerDownLeft, RefreshCw, RotateCcw, Copy, Check, Mic, MicOff, Volume2, VolumeX } from 'lucide-react';
 import { sendChatMessage } from '../apiService';
 
 const INITIAL_WELCOME = [
@@ -21,12 +21,81 @@ export default function ChatWidget({ activeTab = 'overview', onSelectTab, onItem
   const [loading, setLoading] = useState(false);
   const [messages, setMessages] = useState(INITIAL_WELCOME);
   const [copiedId, setCopiedId] = useState(null);
+  const [isListening, setIsListening] = useState(false);
+  const [speakingMsgId, setSpeakingMsgId] = useState(null);
 
   const handleCopyAnswer = (msgId, text) => {
     if (!text) return;
     navigator.clipboard.writeText(text);
     setCopiedId(msgId);
     setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const startVoiceSearch = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("Voice search is supported in Chrome, Edge, or Safari browsers.");
+      return;
+    }
+
+    if (isListening) {
+      setIsListening(false);
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.lang = 'en-US';
+      recognition.interimResults = true;
+      recognition.maxAlternatives = 1;
+
+      recognition.onstart = () => {
+        setIsListening(true);
+      };
+
+      recognition.onresult = (event) => {
+        const transcript = Array.from(event.results)
+          .map((result) => result[0].transcript)
+          .join('');
+        setInput(transcript);
+      };
+
+      recognition.onerror = (event) => {
+        console.warn("Speech recognition notice:", event.error);
+        setIsListening(false);
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      recognition.start();
+    } catch (e) {
+      console.warn("Speech recognition error:", e);
+      setIsListening(false);
+    }
+  };
+
+  const handleReadAloud = (msgId, text) => {
+    if (!window.speechSynthesis) return;
+
+    if (speakingMsgId === msgId) {
+      window.speechSynthesis.cancel();
+      setSpeakingMsgId(null);
+      return;
+    }
+
+    window.speechSynthesis.cancel();
+    const cleanText = text.replace(/[*#\`\-_|]/g, ' ').replace(/\s+/g, ' ');
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
+
+    utterance.onend = () => setSpeakingMsgId(null);
+    utterance.onerror = () => setSpeakingMsgId(null);
+
+    setSpeakingMsgId(msgId);
+    window.speechSynthesis.speak(utterance);
   };
 
   const handleClearChat = () => {
@@ -264,9 +333,27 @@ export default function ChatWidget({ activeTab = 'overview', onSelectTab, onItem
                     </div>
                   )}
 
-                  {/* ChatGPT-Style Copy Answer Button */}
+                  {/* Bot Message Actions: Read Aloud & Copy Answer */}
                   {m.sender === 'bot' && (
                     <div className="chat-msg-footer">
+                      <button
+                        className={`chat-action-footer-btn ${speakingMsgId === m.id ? 'speaking' : ''}`}
+                        onClick={() => handleReadAloud(m.id, m.text)}
+                        title={speakingMsgId === m.id ? 'Stop reading' : 'Read aloud'}
+                      >
+                        {speakingMsgId === m.id ? (
+                          <>
+                            <VolumeX size={12} className="pulse-speaker" />
+                            <span>Stop</span>
+                          </>
+                        ) : (
+                          <>
+                            <Volume2 size={12} />
+                            <span>Listen</span>
+                          </>
+                        )}
+                      </button>
+
                       <button
                         className={`chat-copy-btn ${copiedId === m.id ? 'copied' : ''}`}
                         onClick={() => handleCopyAnswer(m.id, m.text)}
@@ -323,11 +410,19 @@ export default function ChatWidget({ activeTab = 'overview', onSelectTab, onItem
             <input
               ref={inputRef}
               type="text"
-              placeholder="Ask about delays, weather risks, stockouts..."
+              placeholder={isListening ? "Listening... Speak now!" : "Ask about delays, weather risks, stockouts..."}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSend()}
             />
+            <button
+              type="button"
+              className={`chat-mic-btn ${isListening ? 'listening' : ''}`}
+              onClick={startVoiceSearch}
+              title={isListening ? "Listening... Click to stop" : "Voice Search (Speech-to-Text)"}
+            >
+              {isListening ? <MicOff size={15} className="pulse-mic" /> : <Mic size={15} />}
+            </button>
             <button
               className="chat-send-btn"
               onClick={() => handleSend()}
