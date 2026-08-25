@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Navbar from './components/Navbar';
 import NavTabs from './components/NavTabs';
 import DetailModal from './components/DetailModal';
+import ChatWidget from './components/ChatWidget';
 
 import OverviewView from './views/OverviewView';
 import DeliveryView from './views/DeliveryView';
@@ -218,6 +219,13 @@ export default function App() {
           onClose={() => setModalItem(null)}
         />
       )}
+
+      {/* AI Supply Chain Copilot Widget */}
+      <ChatWidget
+        activeTab={activeTab}
+        onSelectTab={setActiveTab}
+        onItemClick={handleItemClick}
+      />
     </div>
   );
 }

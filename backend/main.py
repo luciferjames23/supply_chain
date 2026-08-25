@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
-from routers import analytics, gold, inventory, orders, products, shipments, suppliers
+from routers import analytics, chat, gold, inventory, orders, products, shipments, suppliers
 
 # ─────────────────────────────────────────────
 # App Initialization
@@ -47,6 +47,7 @@ app.include_router(shipments.router, prefix="/api/v1")
 app.include_router(inventory.router, prefix="/api/v1")
 app.include_router(analytics.router, prefix="/api/v1")
 app.include_router(gold.router,      prefix="/api/v1")
+app.include_router(chat.router,      prefix="/api/v1")
 
 
 
