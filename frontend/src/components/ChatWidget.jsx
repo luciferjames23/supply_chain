@@ -1,25 +1,33 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Bot, X, Send, Sparkles, ChevronDown, ArrowRight, CornerDownLeft, RefreshCw } from 'lucide-react';
+import { Bot, X, Send, Sparkles, ChevronDown, ArrowRight, CornerDownLeft, RefreshCw, RotateCcw } from 'lucide-react';
 import { sendChatMessage } from '../apiService';
+
+const INITIAL_WELCOME = [
+  {
+    id: 'welcome',
+    sender: 'bot',
+    text: '### 👋 Welcome to Supply Chain AI Copilot!\n\nI am connected to your **Databricks Gold Catalog RAG** & ML data. Ask me about shipment delays, weather/traffic risks, warehouse stockouts, or supplier lead times.',
+    actionChips: [
+      { label: 'High Risk Shipments', action_type: 'NAVIGATE', target: 'delivery' },
+      { label: 'Stockout Risks', action_type: 'NAVIGATE', target: 'inventory' },
+      { label: 'Supplier Reliability', action_type: 'NAVIGATE', target: 'procurement' },
+    ],
+  },
+];
 
 export default function ChatWidget({ activeTab = 'overview', onSelectTab, onItemClick }) {
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [messages, setMessages] = useState([
-    {
-      id: 'welcome',
-      sender: 'bot',
-      text: '### 👋 Welcome to Supply Chain AI Copilot!\n\nI am connected to your **Databricks Gold Schema** ML data. Ask me about shipment delays, weather/traffic risks, warehouse stockouts, or supplier lead times.',
-      actionChips: [
-        { label: 'High Risk Shipments', action_type: 'NAVIGATE', target: 'delivery' },
-        { label: 'Stockout Risks', action_type: 'NAVIGATE', target: 'inventory' },
-        { label: 'Supplier Reliability', action_type: 'NAVIGATE', target: 'procurement' },
-      ],
-    },
-  ]);
+  const [messages, setMessages] = useState(INITIAL_WELCOME);
+
+  const handleClearChat = () => {
+    setMessages(INITIAL_WELCOME);
+    setInput('');
+  };
 
   const messagesEndRef = useRef(null);
+  const inputRef = useRef(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -28,6 +36,7 @@ export default function ChatWidget({ activeTab = 'overview', onSelectTab, onItem
   useEffect(() => {
     if (isOpen) {
       scrollToBottom();
+      setTimeout(() => inputRef.current?.focus(), 50);
     }
   }, [messages, isOpen]);
 
@@ -46,6 +55,7 @@ export default function ChatWidget({ activeTab = 'overview', onSelectTab, onItem
         id: (Date.now() + 1).toString(),
         sender: 'bot',
         text: res.reply || 'Analysis complete.',
+        source: res.source || 'Databricks Catalog RAG + Groq LLM',
         actionChips: res.action_chips || [],
         itemDetails: res.item_details || null,
       };
@@ -78,25 +88,92 @@ export default function ChatWidget({ activeTab = 'overview', onSelectTab, onItem
   const renderFormattedText = (txt) => {
     if (!txt) return null;
     const lines = txt.split('\n');
-    return lines.map((line, idx) => {
-      let l = line;
-      if (l.startsWith('### ')) {
-        return <h4 key={idx} className="chat-heading">{l.replace('### ', '')}</h4>;
+    const elements = [];
+    let i = 0;
+
+    while (i < lines.length) {
+      const line = lines[i];
+
+      // Detect Markdown Table Start (| Header 1 | Header 2 |)
+      if (line.trim().startsWith('|') && line.trim().endsWith('|')) {
+        const tableLines = [];
+        while (i < lines.length && lines[i].trim().startsWith('|') && lines[i].trim().endsWith('|')) {
+          tableLines.push(lines[i].trim());
+          i++;
+        }
+
+        const dataLines = tableLines.filter((l) => !/^\|[\s\-:|]+\|$/.test(l));
+        if (dataLines.length > 0) {
+          const headerCells = dataLines[0]
+            .split('|')
+            .slice(1, -1)
+            .map((c) => c.trim());
+          const bodyRows = dataLines.slice(1).map((rowLine) =>
+            rowLine
+              .split('|')
+              .slice(1, -1)
+              .map((c) => c.trim())
+          );
+
+          elements.push(
+            <div key={`table-${i}`} className="chat-table-wrapper">
+              <table className="chat-markdown-table">
+                <thead>
+                  <tr>
+                    {headerCells.map((h, hIdx) => (
+                      <th key={hIdx}>{parseMarkdownBold(h)}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {bodyRows.map((row, rIdx) => (
+                    <tr key={rIdx}>
+                      {row.map((cell, cIdx) => (
+                        <td key={cIdx}>{parseMarkdownBold(cell)}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          );
+        }
+        continue;
       }
-      if (l.startsWith('• ') || l.startsWith('- ')) {
-        const content = l.substring(2);
-        return (
-          <div key={idx} className="chat-bullet">
+
+      if (line.startsWith('### ')) {
+        elements.push(
+          <h4 key={`h3-${i}`} className="chat-heading">
+            {line.replace('### ', '')}
+          </h4>
+        );
+      } else if (line.startsWith('## ')) {
+        elements.push(
+          <h3 key={`h2-${i}`} className="chat-sub-heading">
+            {line.replace('## ', '')}
+          </h3>
+        );
+      } else if (line.startsWith('• ') || line.startsWith('- ')) {
+        const content = line.substring(2);
+        elements.push(
+          <div key={`bullet-${i}`} className="chat-bullet">
             <span className="bullet-dot">•</span>
             <span>{parseMarkdownBold(content)}</span>
           </div>
         );
+      } else if (line.trim() === '') {
+        elements.push(<div key={`space-${i}`} style={{ height: '0.4rem' }} />);
+      } else {
+        elements.push(
+          <p key={`p-${i}`} className="chat-line">
+            {parseMarkdownBold(line)}
+          </p>
+        );
       }
-      if (l.trim() === '') {
-        return <div key={idx} style={{ height: '0.4rem' }} />;
-      }
-      return <p key={idx} className="chat-line">{parseMarkdownBold(l)}</p>;
-    });
+      i++;
+    }
+
+    return elements;
   };
 
   const parseMarkdownBold = (str) => {
@@ -141,9 +218,14 @@ export default function ChatWidget({ activeTab = 'overview', onSelectTab, onItem
                 </span>
               </div>
             </div>
-            <button className="chat-close-btn" onClick={() => setIsOpen(false)}>
-              <ChevronDown size={18} />
-            </button>
+            <div className="header-action-group">
+              <button className="chat-clear-btn" onClick={handleClearChat} title="Clear Chat History">
+                <RotateCcw size={15} />
+              </button>
+              <button className="chat-close-btn" onClick={() => setIsOpen(false)} title="Close Chat">
+                <ChevronDown size={18} />
+              </button>
+            </div>
           </div>
 
           {/* Messages Container */}
@@ -208,12 +290,12 @@ export default function ChatWidget({ activeTab = 'overview', onSelectTab, onItem
           {/* Input Footer */}
           <div className="chat-input-bar">
             <input
+              ref={inputRef}
               type="text"
               placeholder="Ask about delays, weather risks, stockouts..."
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-              disabled={loading}
             />
             <button
               className="chat-send-btn"

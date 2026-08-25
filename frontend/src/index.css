@@ -920,6 +920,13 @@ body {
     display: block;
   }
 
+  .header-action-group {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+
+  .chat-clear-btn,
   .chat-close-btn {
     background: transparent;
     border: none;
@@ -934,7 +941,7 @@ body {
 
     &:hover {
       background: var(--bg-card-hover);
-      color: var(--text-main);
+      color: var(--accent-cyan);
     }
   }
 }
@@ -1004,12 +1011,80 @@ body {
   }
 }
 
+.chat-source-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.65rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 12px;
+  background: rgba(2, 132, 199, 0.08);
+  border: 1px solid rgba(2, 132, 199, 0.2);
+  color: var(--accent-cyan);
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
 .chat-heading {
   font-family: var(--font-heading);
   font-size: 0.9rem;
   font-weight: 700;
   margin-bottom: 0.4rem;
   color: var(--text-main);
+}
+
+.chat-sub-heading {
+  font-family: var(--font-heading);
+  font-size: 0.85rem;
+  font-weight: 700;
+  margin-bottom: 0.35rem;
+  color: var(--accent-cyan);
+}
+
+/* Flexible Markdown Table View */
+.chat-table-wrapper {
+  margin: 0.75rem 0;
+  overflow-x: auto;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-light);
+  background: var(--bg-card);
+  box-shadow: var(--shadow-sm);
+}
+
+.chat-markdown-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+  text-align: left;
+
+  th {
+    background: var(--bg-card-hover);
+    color: var(--accent-cyan);
+    font-family: var(--font-heading);
+    font-weight: 700;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border-light);
+    white-space: nowrap;
+  }
+
+  td {
+    padding: 0.45rem 0.75rem;
+    border-bottom: 1px solid var(--border-light);
+    color: var(--text-main);
+    vertical-align: middle;
+  }
+
+  tr:last-child td {
+    border-bottom: none;
+  }
+
+  tr:nth-child(even) td {
+    background: rgba(2, 132, 199, 0.03);
+  }
+
+  tr:hover td {
+    background: rgba(2, 132, 199, 0.08);
+  }
 }
 
 .chat-bullet {

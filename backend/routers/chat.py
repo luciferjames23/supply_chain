@@ -1,16 +1,27 @@
 import json
 import os
 import re
+import time
 import urllib.request
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from config import settings
-from database import qualified, get_connection
-from routers.gold import list_delivery_predictions, list_delivery_ml_features, list_inventory_predictions, list_inventory_ml_features, list_procurement_predictions
+from database import qualified, get_cursor
+from routers.gold import (
+    list_delivery_predictions,
+    list_delivery_ml_features,
+    list_inventory_predictions,
+    list_inventory_ml_features,
+    list_procurement_predictions
+)
 
 router = APIRouter(prefix="/chat", tags=["AI Copilot Chatbot"])
+
+# Response Cache Layer (Key -> { "response": ChatResponse, "timestamp": float, "hit_count": int })
+RESPONSE_CACHE = {}
+CACHE_TTL_SECONDS = 172800  # 2 Days (48 Hours) Cache TTL
 
 
 class ChatRequest(BaseModel):
@@ -28,8 +39,99 @@ class ActionChip(BaseModel):
 class ChatResponse(BaseModel):
     reply: str
     intent: Optional[str] = "GENERAL"
+    source: Optional[str] = "Databricks Catalog RAG + Groq LLM"
     action_chips: List[ActionChip] = []
     item_details: Optional[dict] = None
+
+
+def get_cache_key(prompt: str) -> str:
+    """Normalize user prompt string into a deterministic cache key."""
+    return re.sub(r'[^a-z0-9]', '', prompt.lower())
+
+
+def check_cache(prompt: str) -> Optional[ChatResponse]:
+    """Check if query response is available in cache to save LLM API cost."""
+    key = get_cache_key(prompt)
+    if key in RESPONSE_CACHE:
+        entry = RESPONSE_CACHE[key]
+        if time.time() - entry["timestamp"] < CACHE_TTL_SECONDS:
+            entry["hit_count"] += 1
+            cached_res = entry["response"].copy()
+            cached_res.source = f"Cache Hit (Saved LLM Cost) | {cached_res.source}"
+            print(f"[AI COPILOT CACHE HIT] Query: '{prompt}' | Saved Groq LLM API Call | Total Hits: {entry['hit_count']}")
+            return cached_res
+        else:
+            del RESPONSE_CACHE[key]
+    return None
+
+
+def store_cache(prompt: str, res: ChatResponse):
+    """Store generated response in cache."""
+    key = get_cache_key(prompt)
+    if key:
+        RESPONSE_CACHE[key] = {
+            "response": res,
+            "timestamp": time.time(),
+            "hit_count": 0
+        }
+
+
+def fetch_databricks_sql(sql: str) -> list:
+    with get_cursor() as cursor:
+        cursor.execute(sql)
+        cols = [col[0] for col in cursor.description]
+        return [dict(zip(cols, row)) for row in cursor.fetchall()]
+
+
+def retrieve_databricks_catalog_rag_context(user_query: str) -> Tuple[str, str]:
+    """
+    RAG (Retrieval-Augmented Generation) Engine for Databricks Catalog.
+    Returns (context_string, source_type).
+    """
+    q = user_query.lower()
+    rag_blocks = [f"Catalog: {settings.databricks_catalog}, Schema: {settings.databricks_schema}"]
+    is_live_db = False
+    
+    # 1. Delivery & Route RAG Retrieval
+    if any(k in q for k in ['shipment', 'delivery', 'carrier', 'route', 'delay', 'weather', 'traffic', 'last', 'latest', 'first', 'shp', 'value']):
+        try:
+            sql = f"SELECT shipment_id, carrier_name, origin, destination, distance_km, route_efficiency, weather_risk_score, traffic_risk_score, total_shipment_value, risk_level FROM {qualified('delivery_ml_features', schema='gold')} LIMIT 10"
+            rows = fetch_databricks_sql(sql)
+            if rows:
+                is_live_db = True
+                rag_blocks.append("Databricks Gold Table `delivery_ml_features` (Top 10): " + json.dumps(rows[:10]))
+        except Exception:
+            deliveries = get_delivery_features_safe()
+            rag_blocks.append("Databricks Gold Delivery Telemetry Snapshot: " + json.dumps(deliveries[:8]))
+
+    # 2. Inventory, Products, Sales & Pricing RAG Retrieval
+    if any(k in q for k in ['inventory', 'stock', 'stockout', 'product', 'item', 'cost', 'sell', 'price', 'sales', 'demand', 'warehouse', 'reorder', 'highest', 'expensive', 'prod']):
+        try:
+            sql = f"SELECT product_id, warehouse_id, total_demand, avg_stock_level, stockout_risk_score, stock_status_prediction FROM {qualified('inventory_ml_features', schema='gold')} LIMIT 15"
+            rows = fetch_databricks_sql(sql)
+            if rows:
+                is_live_db = True
+                rag_blocks.append("Databricks Gold Table `inventory_ml_features` (Top 15): " + json.dumps(rows))
+        except Exception:
+            inv = get_inventory_features_safe()
+            sorted_by_price = sorted(inv, key=lambda x: x.get('unit_price', 0), reverse=True)
+            sorted_by_demand = sorted(inv, key=lambda x: x.get('total_demand', 0), reverse=True)
+            rag_blocks.append("Databricks Gold Product Catalog (Highest Unit Price/Cost Items): " + json.dumps(sorted_by_price[:5]))
+            rag_blocks.append("Databricks Gold Product Catalog (Highest Demand/Sales Items): " + json.dumps(sorted_by_demand[:5]))
+
+    # 3. Supplier & Procurement RAG Retrieval
+    if any(k in q for k in ['supplier', 'vendor', 'procurement', 'lead time', 'fulfillment', 'car']):
+        try:
+            sql = f"SELECT supplier_id, supplier_name, category, average_lead_time_days, risk_category FROM {qualified('procurement_ml_features', schema='gold')} LIMIT 10"
+            rows = fetch_databricks_sql(sql)
+            if rows:
+                is_live_db = True
+                rag_blocks.append("Databricks Gold Table `procurement_ml_features` (Top 10): " + json.dumps(rows[:10]))
+        except Exception:
+            rag_blocks.append("Databricks Procurement Telemetry: 120 suppliers monitored, 14 high lead-time risk suppliers.")
+
+    source_type = "Databricks SQL RAG + Groq LLM (openai/gpt-oss-120b)" if is_live_db else "Databricks Gold Catalog RAG + Groq LLM (openai/gpt-oss-120b)"
+    return "\n---\n".join(rag_blocks), source_type
 
 
 def get_delivery_features_safe() -> list:
@@ -77,10 +179,21 @@ def get_inventory_features_safe() -> list:
     except Exception:
         pass
         
+    product_names = ['Standing Desk Pro', 'Speaker System 5.1', '4K Ergonomic Monitor', 'Noise Canceling Headphones', 'USB-C Docking Station', 'Wireless Mechanical Keyboard', 'Executive Chair', 'Marker Pen Pack']
+    categories = ['Furniture', 'Electronics', 'Electronics', 'Electronics', 'Electronics', 'Electronics', 'Furniture', 'Stationery']
+    prices = [650.00, 499.00, 420.00, 250.00, 180.00, 120.00, 350.00, 45.00]
+    
     records = []
     for i in range(120):
+        name = product_names[i % len(product_names)]
+        cat = categories[i % len(categories)]
+        price = prices[i % len(prices)]
         records.append({
             'product_id': f"PROD{str(i + 1).zfill(4)}",
+            'product_name': name,
+            'category': cat,
+            'unit_price': price,
+            'unit_cost': round(price * 0.60, 2),
             'warehouse_id': f"WH00{(i % 6) + 1}",
             'total_demand': 1200 + (i * 140) % 9000,
             'avg_stock_level': 300 + (i * 35) % 1500,
@@ -98,8 +211,8 @@ def call_groq_llama_70b(user_prompt: str, context_str: str) -> Optional[str]:
     if not api_key:
         print("[Groq AI Warning] GROQ_API_KEY is not set.")
         return None
+        
     configured_model = getattr(settings, "groq_model", "openai/gpt-oss-120b")
-    
     url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -109,17 +222,16 @@ def call_groq_llama_70b(user_prompt: str, context_str: str) -> Optional[str]:
     
     system_prompt = (
         "You are the dedicated AI Control Tower Copilot for this enterprise Supply Chain Management platform.\n\n"
-        "STRICT DOMAIN GUARDRAILS & SCOPE RULES:\n"
-        "1. ONLY answer questions related to supply chain operations, shipments, delivery tracking, weather/traffic risks, "
-        "warehouse inventory, product demand, stockout forecasts, procurement, supplier reliability, and operational KPIs.\n"
-        "2. If the user asks ANY out-of-scope, off-topic, or non-supply-chain question (e.g. general trivia, recipes, sports, coding unrelated apps, entertainment, history), "
-        "you MUST politely decline. Respond strictly with: "
-        "'I am your specialized Supply Chain Control Tower AI Copilot. I can only assist with questions regarding your supply chain platform, shipments, inventory forecasts, suppliers, and operational logistics.'\n"
-        "3. When answering in-scope supply chain queries, analyze the provided Databricks Gold telemetry context carefully. "
-        "If asked about 'last shipment', 'latest shipment', 'first shipment', 'highest value shipment', or specific metrics, identify the EXACT record from the telemetry data and state its ID, carrier, route, distance, value, and status.\n"
-        "4. Format your response using clean GitHub Markdown (bullet points, bold text, mini tables, code blocks) including exact metrics and actionable recommendations.\n"
-        "5. Keep the response executive-ready, professional, and concise.\n\n"
-        f"Databricks Gold Telemetry Context:\n{context_str}"
+        "STRICT BUSINESS USER DIRECTIVE & AUDIENCE RULES:\n"
+        "1. EXECUTIVE AUDIENCE: Write ALL responses strictly for BUSINESS EXECUTIVES, SUPPLY CHAIN MANAGERS, AND LOGISTICS OPERATORS.\n"
+        "2. NO DEVELOPER JARGON OR CODE: DO NOT output any SQL code blocks, Spark queries, Python code snippets, table schema joins, or technical developer instructions under any circumstances.\n"
+        "3. BUSINESS INSIGHTS: Present answers in clear business language using exact product names, product IDs, dollar amounts ($), total sales demand, warehouse stock levels, carrier transit times, and actionable recommendations.\n"
+        "4. IN-SCOPE QUERIES: You MUST answer all questions regarding supply chain operations, shipments, delivery tracking, weather/traffic risks, "
+        "product catalog, product pricing, highest cost/selling products, warehouse inventory, product demand, stockout forecasts, procurement, supplier reliability, and operational KPIs.\n"
+        "5. OUT-OF-SCOPE DECLINE RULE: If and ONLY if the user asks an entirely unrelated non-supply-chain question (e.g. cooking recipes, sports teams, celebrity news, general history, coding unrelated non-logistics apps), "
+        "you MUST politely decline with: 'I am your specialized Supply Chain Control Tower AI Copilot. I can only assist with questions regarding your supply chain platform, shipments, products, inventory forecasts, suppliers, and operational logistics.'\n"
+        "6. FORMATTING: Format your response using clean, executive GitHub Markdown with summary tables, bold key metrics, and bulleted business recommendations.\n\n"
+        f"Databricks Telemetry Context:\n{context_str}"
     )
     
     candidate_models = [configured_model, "openai/gpt-oss-120b", "qwen/qwen3.6-27b", "openai/gpt-oss-20b", "groq/compound"]
@@ -150,76 +262,78 @@ def call_groq_llama_70b(user_prompt: str, context_str: str) -> Optional[str]:
     return None
 
 
-@router.post("/message", response_model=ChatResponse, summary="Send message to Groq Llama 70B AI Supply Chain Copilot")
+@router.post("/message", response_model=ChatResponse, summary="Send message to Groq AI Supply Chain Copilot with Databricks RAG & Response Cache")
 def process_chat_message(req: ChatRequest):
     """
-    Groq Llama 3.3 / GPT-OSS 120B powered AI Control Tower Copilot.
+    Databricks Catalog RAG & Groq LLM powered AI Control Tower Copilot.
+    Features Query Response Caching to eliminate duplicate LLM API costs.
     """
+    # 0. Check Response Cache to eliminate LLM costs on repeated queries
+    cached = check_cache(req.message)
+    if cached:
+        return cached
+
     msg = req.message.strip().lower()
+    res = None
     
     # 1. Specific Shipment ID (e.g. SHP56305 or SHP5119)
     shp_match = re.search(r'shp\d+', msg, re.IGNORECASE)
     if shp_match:
         shipment_id = shp_match.group(0).upper()
-        return analyze_specific_shipment(shipment_id, req.message)
-        
+        res = analyze_specific_shipment(shipment_id, req.message)
     # 2. Specific Product ID (e.g. PROD0032)
-    prod_match = re.search(r'prod\d+', msg, re.IGNORECASE)
-    if prod_match:
-        product_id = prod_match.group(0).upper()
-        return analyze_specific_product(product_id, req.message)
-
+    elif re.search(r'prod\d+', msg, re.IGNORECASE):
+        product_id = re.search(r'prod\d+', msg, re.IGNORECASE).group(0).upper()
+        res = analyze_specific_product(product_id, req.message)
     # 3. Intent: Delivery Delays, Last/Latest Shipment, & Route Risks
-    if any(k in msg for k in ['shipment', 'delivery', 'delay', 'weather', 'traffic', 'carrier', 'route', 'tracking', 'last', 'latest', 'first', 'value']):
-        return analyze_delivery_risks(req.message)
-
-    # 4. Intent: Inventory & Stockout Forecasts
-    if any(k in msg for k in ['inventory', 'stock', 'stockout', 'reorder', 'warehouse', 'demand', 'safety stock']):
-        return analyze_inventory_risks(req.message)
-
+    elif any(k in msg for k in ['shipment', 'delivery', 'delay', 'weather', 'traffic', 'carrier', 'route', 'tracking', 'last', 'latest', 'first', 'value']):
+        res = analyze_delivery_risks(req.message)
+    # 4. Intent: Inventory, Product Catalog, High Cost/Selling Products
+    elif any(k in msg for k in ['inventory', 'stock', 'stockout', 'reorder', 'warehouse', 'demand', 'safety stock', 'product', 'item', 'cost', 'sell', 'price', 'sales', 'revenue', 'highest', 'expensive', 'top']):
+        res = analyze_inventory_risks(req.message)
     # 5. Intent: Procurement & Supplier Performance
-    if any(k in msg for k in ['procurement', 'supplier', 'vendor', 'lead time', 'reliability', 'fulfillment']):
-        return analyze_procurement_risks(req.message)
-
+    elif any(k in msg for k in ['procurement', 'supplier', 'vendor', 'lead time', 'reliability', 'fulfillment']):
+        res = analyze_procurement_risks(req.message)
     # 6. Intent: Operational KPIs
-    if any(k in msg for k in ['kpi', 'overview', 'total', 'summary', 'orders', 'status', 'health', 'network']):
-        return analyze_executive_kpis(req.message)
+    elif any(k in msg for k in ['kpi', 'overview', 'total', 'summary', 'orders', 'status', 'health', 'network']):
+        res = analyze_executive_kpis(req.message)
+    else:
+        # General RAG Query with Databricks Catalog RAG Engine
+        rag_context, rag_source = retrieve_databricks_catalog_rag_context(req.message)
+        llm_reply = call_groq_llama_70b(req.message, rag_context)
+        
+        deliveries = get_delivery_features_safe()
+        last_shp = deliveries[-1] if deliveries else None
 
-    # General Query with Groq AI
-    deliveries = get_delivery_features_safe()
-    last_shp = deliveries[-1] if deliveries else None
-    first_shp = deliveries[0] if deliveries else None
-    
-    context_str = (
-        f"Databricks Catalog: supply_chain, Schema: gold.\n"
-        f"Total Deliveries Tracked: {len(deliveries)}.\n"
-        f"FIRST Shipment Logged: ID={first_shp.get('shipment_id')}, Carrier={first_shp.get('carrier_name')}, Route={first_shp.get('origin')}->{first_shp.get('destination')}, Date={first_shp.get('estimated_delivery_date')}.\n"
-        f"LAST / LATEST Shipment Logged: ID={last_shp.get('shipment_id')}, Carrier={last_shp.get('carrier_name')}, Route={last_shp.get('origin')}->{last_shp.get('destination')}, Distance={last_shp.get('distance_km')}km, Value=${last_shp.get('total_shipment_value'):,}, Date={last_shp.get('estimated_delivery_date')}, Status={last_shp.get('shipment_status')}.\n"
-    ) if last_shp else "Databricks Catalog: supply_chain, Schema: gold."
-    
-    llm_reply = call_groq_llama_70b(req.message, context_str)
-    
-    action_chips = []
-    if last_shp:
-        action_chips.append(ActionChip(label=f"Inspect {last_shp.get('shipment_id')}", action_type="INSPECT", target=last_shp.get("shipment_id")))
-    action_chips.append(ActionChip(label="High Risk Deliveries", action_type="NAVIGATE", target="delivery"))
-    action_chips.append(ActionChip(label="Stockout Forecasts", action_type="NAVIGATE", target="inventory"))
+        action_chips = []
+        if last_shp:
+            action_chips.append(ActionChip(label=f"Inspect {last_shp.get('shipment_id')}", action_type="INSPECT", target=last_shp.get("shipment_id")))
+        action_chips.append(ActionChip(label="High Risk Deliveries", action_type="NAVIGATE", target="delivery"))
+        action_chips.append(ActionChip(label="Stockout Forecasts", action_type="NAVIGATE", target="inventory"))
 
-    if not llm_reply:
-        llm_reply = (
-            "I am your **Groq AI Supply Chain Copilot**.\n\n"
-            "• **Shipment & Delivery Risks** (*e.g., 'Which shipment is our last shipment?'* or *'Analyze SHP56305'*)\n"
-            "• **Stockout & Reorder Forecasts** (*e.g., 'Show stockout risks for warehouse WH002'*)\n"
-            "• **Supplier & Procurement Reliability** (*e.g., 'Which suppliers have high fulfillment delays?'*)\n"
-            "• **Executive KPIs** (*e.g., 'Summarize overall network health'*)\n"
+        if llm_reply:
+            source_label = rag_source
+        else:
+            source_label = "Databricks Gold Analytics Engine (Offline Fallback)"
+            llm_reply = (
+                "I am your **Databricks Catalog RAG Supply Chain AI Copilot**.\n\n"
+                "• **Shipment & Delivery Risks** (*e.g., 'Which shipment is our last shipment?'* or *'Analyze SHP56305'*)\n"
+                "• **Stockout & Reorder Forecasts** (*e.g., 'Show stockout risks for warehouse WH002'*)\n"
+                "• **Supplier & Procurement Reliability** (*e.g., 'Which suppliers have high fulfillment delays?'*)\n"
+                "• **Executive KPIs** (*e.g., 'Summarize overall network health'*)\n"
+            )
+
+        res = ChatResponse(
+            reply=llm_reply,
+            intent="GENERAL",
+            source=source_label,
+            action_chips=action_chips,
+            item_details=last_shp
         )
 
-    return ChatResponse(
-        reply=llm_reply,
-        intent="GENERAL",
-        action_chips=action_chips,
-        item_details=last_shp
-    )
+    print(f"[AI COPILOT LOG] Query: '{req.message}' | Source: {res.source}")
+    store_cache(req.message, res)
+    return res
 
 
 def analyze_specific_shipment(shipment_id: str, original_msg: str) -> ChatResponse:
@@ -241,6 +355,8 @@ def analyze_specific_shipment(shipment_id: str, original_msg: str) -> ChatRespon
         )
         
         llm_reply = call_groq_llama_70b(original_msg, context_str)
+        source = "Databricks Catalog RAG + Groq LLM (openai/gpt-oss-120b)" if llm_reply else "Databricks Gold Analytics Engine"
+        
         if not llm_reply:
             llm_reply = (
                 f"### 🚛 Shipment Breakdown: `{found.get('shipment_id')}`\n\n"
@@ -255,6 +371,7 @@ def analyze_specific_shipment(shipment_id: str, original_msg: str) -> ChatRespon
         return ChatResponse(
             reply=llm_reply,
             intent="SHIPMENT_DETAIL",
+            source=source,
             action_chips=[
                 ActionChip(label=f"Inspect {found.get('shipment_id')}", action_type="INSPECT", target=found.get('shipment_id')),
                 ActionChip(label="View Delivery Tab", action_type="NAVIGATE", target="delivery")
@@ -265,6 +382,7 @@ def analyze_specific_shipment(shipment_id: str, original_msg: str) -> ChatRespon
     return ChatResponse(
         reply=f"Shipment `{shipment_id}` is actively monitored by our control tower network. Click below to inspect transit metrics.",
         intent="SHIPMENT_DETAIL",
+        source="Databricks Gold Analytics Engine",
         action_chips=[ActionChip(label="Filter Delivery Tab", action_type="NAVIGATE", target="delivery")]
     )
 
@@ -278,15 +396,18 @@ def analyze_specific_product(product_id: str, original_msg: str) -> ChatResponse
         days = f"{found.get('predicted_days_to_stockout')} days" if found.get('predicted_days_to_stockout') else "Optimal"
         
         context_str = (
-            f"Product ID: {found.get('product_id')}, Warehouse: {found.get('warehouse_id')}, Total Demand: {found.get('total_demand')}, "
+            f"Product ID: {found.get('product_id')}, Product Name: {found.get('product_name')}, Unit Price: ${found.get('unit_price')}, Unit Cost: ${found.get('unit_cost')}, Warehouse: {found.get('warehouse_id')}, Total Demand: {found.get('total_demand')}, "
             f"Avg Stock Level: {found.get('avg_stock_level')}, Stockout Risk Score: {risk_pct}, "
             f"Days to Stockout: {days}, Predicted Status: {found.get('stock_status_prediction') or 'OPTIMAL'}"
         )
         
         llm_reply = call_groq_llama_70b(original_msg, context_str)
+        source = "Databricks Catalog RAG + Groq LLM (openai/gpt-oss-120b)" if llm_reply else "Databricks Gold Analytics Engine"
+
         if not llm_reply:
             llm_reply = (
-                f"### 📦 Inventory Status: `{found.get('product_id')}`\n\n"
+                f"### 📦 Inventory Status: `{found.get('product_id')}` - {found.get('product_name')}\n\n"
+                f"• **Unit Price**: ${found.get('unit_price')}\n"
                 f"• **Warehouse**: {found.get('warehouse_id')}\n"
                 f"• **Total Demand**: {found.get('total_demand') or 0:,} units\n"
                 f"• **Avg Stock Level**: {found.get('avg_stock_level') or 0:,.0f} units\n"
@@ -298,6 +419,7 @@ def analyze_specific_product(product_id: str, original_msg: str) -> ChatResponse
         return ChatResponse(
             reply=llm_reply,
             intent="PRODUCT_DETAIL",
+            source=source,
             action_chips=[
                 ActionChip(label=f"Inspect {found.get('product_id')}", action_type="INSPECT", target=found.get('product_id')),
                 ActionChip(label="View Inventory Tab", action_type="NAVIGATE", target="inventory")
@@ -308,28 +430,20 @@ def analyze_specific_product(product_id: str, original_msg: str) -> ChatResponse
     return ChatResponse(
         reply=f"Product `{product_id}` is tracked across regional warehouses. Navigate to Inventory to review safety stock.",
         intent="PRODUCT_DETAIL",
+        source="Databricks Gold Analytics Engine",
         action_chips=[ActionChip(label="Go to Inventory", action_type="NAVIGATE", target="inventory")]
     )
 
 
 def analyze_delivery_risks(original_msg: str) -> ChatResponse:
+    rag_context, rag_source = retrieve_databricks_catalog_rag_context(original_msg)
     deliveries = get_delivery_features_safe()
-    first_shp = deliveries[0] if deliveries else None
     last_shp = deliveries[-1] if deliveries else None
     high_risk = [d for d in deliveries if d.get('risk_level') == 'HIGH' or d.get('is_delayed')]
     
-    sample_ids = ", ".join([f"`{d.get('shipment_id')}`" for d in high_risk[:4]]) if high_risk else "None"
-    
-    context_str = (
-        f"Total Active Deliveries Monitored: {len(deliveries)}.\n"
-        f"FIRST Shipment Logged: ID={first_shp.get('shipment_id') if first_shp else 'None'}, Carrier={first_shp.get('carrier_name') if first_shp else ''}, Route={first_shp.get('origin') if first_shp else ''}->{first_shp.get('destination') if first_shp else ''}, Date={first_shp.get('estimated_delivery_date') if first_shp else ''}.\n"
-        f"LAST / LATEST Shipment Logged: ID={last_shp.get('shipment_id') if last_shp else 'None'}, Carrier={last_shp.get('carrier_name') if last_shp else ''}, Route={last_shp.get('origin') if last_shp else ''}->{last_shp.get('destination') if last_shp else ''}, Distance={last_shp.get('distance_km') if last_shp else ''}km, Value=${last_shp.get('total_shipment_value') if last_shp else 0:,}, Date={last_shp.get('estimated_delivery_date') if last_shp else ''}, Status={last_shp.get('shipment_status') if last_shp else ''}.\n"
-        f"High Delay Risk Count: {len(high_risk)}, High Risk Sample IDs: {sample_ids}.\n"
-        f"Bottlenecks: Weather corridor bottlenecks along Midwest routes and sorting center traffic variance."
-    )
-    
-    llm_reply = call_groq_llama_70b(original_msg, context_str)
-    
+    llm_reply = call_groq_llama_70b(original_msg, rag_context)
+    source = rag_source if llm_reply else "Databricks Gold Analytics Engine"
+
     action_chips = []
     if last_shp and ("last" in original_msg.lower() or "latest" in original_msg.lower()):
         action_chips.append(ActionChip(label=f"Inspect {last_shp.get('shipment_id')}", action_type="INSPECT", target=last_shp.get('shipment_id')))
@@ -337,6 +451,7 @@ def analyze_delivery_risks(original_msg: str) -> ChatResponse:
     action_chips.append(ActionChip(label="Open Delivery View", action_type="NAVIGATE", target="delivery"))
 
     if not llm_reply:
+        sample_ids = ", ".join([f"`{d.get('shipment_id')}`" for d in high_risk[:4]]) if high_risk else "None"
         llm_reply = (
             f"### 🚚 Delivery & Route Risk Summary\n\n"
             f"• **Total Active Deliveries Tracked**: {len(deliveries):,}\n"
@@ -348,21 +463,31 @@ def analyze_delivery_risks(original_msg: str) -> ChatResponse:
     return ChatResponse(
         reply=llm_reply,
         intent="DELIVERY_RISK",
+        source=source,
         action_chips=action_chips,
         item_details=last_shp if ("last" in original_msg.lower() or "latest" in original_msg.lower()) else None
     )
 
 
 def analyze_inventory_risks(original_msg: str) -> ChatResponse:
+    rag_context, rag_source = retrieve_databricks_catalog_rag_context(original_msg)
     inv_feats = get_inventory_features_safe()
+    highest_price_item = max(inv_feats, key=lambda x: x.get('unit_price', 0)) if inv_feats else None
     stockouts = [i for i in inv_feats if i.get('stock_status_prediction') == 'LOW_STOCK' or (i.get('stockout_risk_score') or 0) > 0.5]
     
-    context_str = f"Monitored Products Count: {len(inv_feats)}, Stockout Risks Detected Count: {len(stockouts)} items requiring emergency PO."
-    
-    llm_reply = call_groq_llama_70b(original_msg, context_str)
+    llm_reply = call_groq_llama_70b(original_msg, rag_context)
+    source = rag_source if llm_reply else "Databricks Gold Analytics Engine"
+
+    action_chips = []
+    if highest_price_item:
+        action_chips.append(ActionChip(label=f"Inspect {highest_price_item.get('product_id')}", action_type="INSPECT", target=highest_price_item.get('product_id')))
+    action_chips.append(ActionChip(label="Filter Stockout Risks", action_type="FILTER", target="STOCKOUT_RISK"))
+    action_chips.append(ActionChip(label="Open Inventory View", action_type="NAVIGATE", target="inventory"))
+
     if not llm_reply:
         llm_reply = (
-            f"### 📦 Stockout & Inventory Forecast Summary\n\n"
+            f"### 📦 Product & Inventory Summary\n\n"
+            f"• **Highest Unit Price Product**: **{highest_price_item.get('product_id')} - {highest_price_item.get('product_name')}** (${highest_price_item.get('unit_price')})\n"
             f"• **Products Monitored**: {len(inv_feats):,}\n"
             f"• **Stockout Risks Detected**: **{len(stockouts)}** items requiring emergency purchase orders\n"
             f"• **Suggested Action**: Issue re-orders for high sales velocity items to maintain safety stock targets."
@@ -371,17 +496,17 @@ def analyze_inventory_risks(original_msg: str) -> ChatResponse:
     return ChatResponse(
         reply=llm_reply,
         intent="INVENTORY_RISK",
-        action_chips=[
-            ActionChip(label="Filter Stockout Risks", action_type="FILTER", target="STOCKOUT_RISK"),
-            ActionChip(label="Open Inventory View", action_type="NAVIGATE", target="inventory")
-        ]
+        source=source,
+        action_chips=action_chips,
+        item_details=highest_price_item
     )
 
 
 def analyze_procurement_risks(original_msg: str) -> ChatResponse:
-    context_str = "Supplier Count: 120, High Lead-Time Risk Suppliers Count: 14."
-    llm_reply = call_groq_llama_70b(original_msg, context_str)
-    
+    rag_context, rag_source = retrieve_databricks_catalog_rag_context(original_msg)
+    llm_reply = call_groq_llama_70b(original_msg, rag_context)
+    source = rag_source if llm_reply else "Databricks Gold Analytics Engine"
+
     if not llm_reply:
         llm_reply = (
             f"### 🏭 Procurement & Supplier Intelligence\n\n"
@@ -393,21 +518,19 @@ def analyze_procurement_risks(original_msg: str) -> ChatResponse:
     return ChatResponse(
         reply=llm_reply,
         intent="PROCUREMENT_RISK",
+        source=source,
         action_chips=[ActionChip(label="View Supplier Performance", action_type="NAVIGATE", target="procurement")]
     )
 
 
 def analyze_executive_kpis(original_msg: str) -> ChatResponse:
-    deliveries = get_delivery_features_safe()
-    last_shp = deliveries[-1] if deliveries else None
-    
-    context_str = (
-        f"Databricks Catalog: supply_chain, Schema: gold. Total Deliveries: {len(deliveries)}. "
-        f"Latest Shipment: {last_shp.get('shipment_id') if last_shp else 'None'} ({last_shp.get('carrier_name') if last_shp else ''}, {last_shp.get('origin') if last_shp else ''}->{last_shp.get('destination') if last_shp else ''})."
-    )
-    llm_reply = call_groq_llama_70b(original_msg, context_str)
-    
+    rag_context, rag_source = retrieve_databricks_catalog_rag_context(original_msg)
+    llm_reply = call_groq_llama_70b(original_msg, rag_context)
+    source = rag_source if llm_reply else "Databricks Gold Analytics Engine"
+
     if not llm_reply:
+        deliveries = get_delivery_features_safe()
+        last_shp = deliveries[-1] if deliveries else None
         llm_reply = (
             f"### ⚡ Supply Chain Control Tower Health\n\n"
             f"• **Catalog**: `supply_chain` | **Schema**: `gold`\n"
@@ -419,6 +542,7 @@ def analyze_executive_kpis(original_msg: str) -> ChatResponse:
     return ChatResponse(
         reply=llm_reply,
         intent="KPI_OVERVIEW",
+        source=source,
         action_chips=[
             ActionChip(label="Executive Overview", action_type="NAVIGATE", target="overview"),
             ActionChip(label="Operations Center", action_type="NAVIGATE", target="operations")
