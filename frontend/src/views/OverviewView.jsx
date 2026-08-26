@@ -47,7 +47,7 @@ export default function OverviewView({ goldSummary, kpis, topProducts, onSelectT
         <div className="glass-card kpi-card cyan">
           <div>
             <div className="kpi-title">Active Orders</div>
-            <div className="kpi-value">{kpis?.total_orders?.toLocaleString() || '1,151'}</div>
+            <div className="kpi-value">{kpis?.total_orders?.toLocaleString() || '2,461'}</div>
             <div className="kpi-sub">Total active orders across all hubs</div>
           </div>
           <div className="kpi-icon">
